@@ -20,7 +20,7 @@ VoiceTypo Integrated - 프로젝트 개요
   마이크 (sounddevice)
     |
     +-> pitch_detection/  --> 주파수(Hz)
-    +-> vowel_recognition/ --> 인식된 모음 (아/어/오/우/으/이/에/애)
+    +-> vowel_recognition/ --> 인식된 모음 (아/어/오/우/으/이/에)
     |
     +-> ui/main_window.py
           |

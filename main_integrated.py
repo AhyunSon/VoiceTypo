@@ -35,9 +35,12 @@ from text_effects.test_effects import (
     load_glyph_data, compute_joint_mask, apply_vibrato_to_sdf,
     sdf_to_rgba, compute_colors,
 )
+from vowel_recognition.formant_classifier import (
+    FormantVowelClassifier, FormantCalibrator, DEFAULT_PROTOTYPES,
+)
+from vowel_recognition.method_1_mfcc_cosine.classifier import MfccCosineClassifier
 
-# 모음 인식 모듈 (지연 로딩)
-RECOGNITION_AVAILABLE = False
+RECOGNITION_AVAILABLE = False  # XLSR 모델 로드 완료 시 True
 
 
 # ═══════════════════════════════════════════════════
@@ -195,6 +198,21 @@ class VowelRecognitionWorker(QObject):
 class AudioBridge(QObject):
     updated = Signal(float, float, float, float, bool)  # freq, rms, vib_rate, vib_extent, vad
     spectrum_updated = Signal(object)  # FFT magnitude array (numpy)
+    vowel_detected = Signal(str, float, float, float)  # vowel, conf, f1, f2
+    method_changed = Signal(str)  # 방식 변경 알림
+    raw_audio = Signal(object)  # 캘리브레이션용 raw chunk (numpy)
+
+    # 인식 방식
+    METHOD_FORMANT = 'formant'
+    METHOD_MFCC = 'mfcc'
+    METHOD_XLSR = 'xlsr'
+    METHODS = [METHOD_FORMANT, METHOD_MFCC, METHOD_XLSR]
+
+    METHOD_LABELS = {
+        METHOD_FORMANT: '포먼트',
+        METHOD_MFCC: 'MFCC+코사인',
+        METHOD_XLSR: 'XLSR-53+SVM',
+    }
 
     def __init__(self, sample_rate=44100, blocksize=2048):
         super().__init__()
@@ -204,6 +222,87 @@ class AudioBridge(QObject):
         self._vad = VoiceActivityDetector()
         self._window = np.hanning(blocksize).astype(np.float32)
 
+        # 분류기들
+        self._formant_clf = FormantVowelClassifier(sample_rate=sample_rate)
+        self._mfcc_clf = MfccCosineClassifier(sample_rate=sample_rate)
+
+        # XLSR 워커 + 발화 수집기
+        self._xlsr_worker = VowelRecognitionWorker()
+        self._utterance_collector = UtteranceCollector(sr=sample_rate)
+        self._xlsr_loaded = False
+
+        # 현재 방식
+        self._method = self.METHOD_FORMANT
+
+        # MFCC 캘리브레이션 자동 로드
+        self._mfcc_cal_path = os.path.join(
+            os.path.dirname(__file__),
+            'vowel_recognition', 'method_1_mfcc_cosine', 'calibration.json')
+        self._mfcc_clf.load_calibration(self._mfcc_cal_path)
+
+    @property
+    def method(self):
+        return self._method
+
+    @property
+    def formant_classifier(self):
+        return self._formant_clf
+
+    @property
+    def mfcc_classifier(self):
+        return self._mfcc_clf
+
+    def switch_method(self):
+        """포먼트 → MFCC → XLSR → 포먼트 순환 전환."""
+        idx = self.METHODS.index(self._method)
+        self._method = self.METHODS[(idx + 1) % len(self.METHODS)]
+
+        name = self.METHOD_LABELS[self._method]
+
+        if self._method == self.METHOD_MFCC:
+            if not self._mfcc_clf.is_calibrated:
+                name += " [캘리브레이션 필요]"
+        elif self._method == self.METHOD_XLSR:
+            if not self._xlsr_loaded:
+                name += " [모델 로딩 중...]"
+                self._start_xlsr_loading()
+
+        label = f"{name} (M키: 전환, C키: 캘리브레이션)"
+        print(f'[방식 전환] {self._method}', flush=True)
+        self.method_changed.emit(label)
+
+    def _start_xlsr_loading(self):
+        """XLSR 모델을 백그라운드 스레드에서 로드."""
+        if self._xlsr_loaded:
+            return
+
+        def on_status(msg):
+            self.method_changed.emit(f"XLSR-53: {msg} (M키: 전환)")
+
+        def on_loaded():
+            self._xlsr_loaded = True
+            if self._method == self.METHOD_XLSR:
+                self.method_changed.emit(
+                    "XLSR-53+SVM (M키: 전환)")
+
+        self._xlsr_worker.status_changed.connect(on_status)
+        self._xlsr_worker.recognized.connect(
+            lambda v, c: self.vowel_detected.emit(v, c, 0.0, 0.0))
+
+        self._xlsr_thread = threading.Thread(
+            target=self._xlsr_load_and_run, daemon=True)
+        self._xlsr_thread.start()
+
+    def _xlsr_load_and_run(self):
+        """XLSR 모델 로드 + 추론 루프 (백그라운드 스레드)."""
+        self._xlsr_worker.load_models()
+        if RECOGNITION_AVAILABLE:
+            self._xlsr_loaded = True
+            if self._method == self.METHOD_XLSR:
+                self.method_changed.emit(
+                    "XLSR-53+SVM (M키: 전환)")
+            self._xlsr_worker.process_loop()
+
     def on_audio(self, chunk, sr):
         freq, rms = self._detector.detect(chunk)
         self._vad.update(rms, freq)
@@ -211,14 +310,42 @@ class AudioBridge(QObject):
         rate, extent = self._vibrato.get()
         self.updated.emit(freq, rms, rate, extent, self._vad.is_active)
 
-        # FFT spectrum (0 ~ 4000 Hz)
+        # FFT (스펙트럼 표시 + 포먼트 추출 공용)
         n = len(chunk)
         if n == len(self._window):
-            fft_mag = np.abs(np.fft.rfft(chunk * self._window))
+            windowed = chunk * self._window
         else:
-            fft_mag = np.abs(np.fft.rfft(chunk * np.hanning(n)))
+            windowed = chunk * np.hanning(n).astype(np.float32)
+        fft_mag = np.abs(np.fft.rfft(windowed))
+        fft_freqs = np.fft.rfftfreq(n, d=1.0 / sr)
+
         max_bin = int(4000 * n / sr)
         self.spectrum_updated.emit(fft_mag[:max_bin])
+
+        # 모음 인식
+        if self._vad.is_active:
+            self.raw_audio.emit(chunk)
+
+            if self._method == self.METHOD_XLSR:
+                # XLSR: 발화 수집 → 백그라운드 추론
+                self._utterance_collector.on_audio(chunk, sr)
+                utt = self._utterance_collector.get_utterance()
+                if utt is not None and self._xlsr_loaded:
+                    self._xlsr_worker.submit(utt, sr)
+            elif self._method == self.METHOD_MFCC:
+                vowel, conf, f1, f2 = self._mfcc_clf.classify(
+                    chunk, f0=freq, fft_mag=fft_mag, fft_freqs=fft_freqs)
+                if vowel is not None:
+                    self.vowel_detected.emit(vowel, conf, f1, f2)
+            else:
+                vowel, conf, f1, f2 = self._formant_clf.classify(
+                    chunk, f0=freq, fft_mag=fft_mag, fft_freqs=fft_freqs)
+                if vowel is not None:
+                    self.vowel_detected.emit(vowel, conf, f1, f2)
+        else:
+            self._formant_clf.reset()
+            self._mfcc_clf.reset()
+            self._utterance_collector.reset()
 
 
 # ═══════════════════════════════════════════════════
@@ -432,15 +559,16 @@ class IntegratedCanvas(QWidget):
         self._recognized_vowel = smoothed_vowel
         self._recognized_conf = confidence
 
-        # 정답 비교 로그 (스무딩 전 raw 결과 기록)
+        # 정답 비교 로그 (스무딩 전 raw 결과 기록 + 현재 방식)
         gt = self._gt_label
         if gt != "—":
             from datetime import datetime
+            method = self._bridge.method if self._bridge else 'unknown'
             mark = 'O' if smoothed_vowel == gt else 'X'
-            self._gt_log.append((datetime.now().strftime('%H:%M:%S'), gt, smoothed_vowel, confidence))
-            correct = sum(1 for _, g, p, _ in self._gt_log if g == p)
+            self._gt_log.append((datetime.now().strftime('%H:%M:%S'), gt, smoothed_vowel, confidence, method))
+            correct = sum(1 for r in self._gt_log if r[1] == r[2])
             total = len(self._gt_log)
-            print(f'[비교] 정답={gt} 예측={vowel}→{smoothed_vowel} {mark} ({confidence:.0%})  '
+            print(f'[비교:{method}] 정답={gt} 예측={vowel}→{smoothed_vowel} {mark} ({confidence:.0%})  '
                   f'누적: {correct}/{total} ({correct/total*100:.1f}%)', flush=True)
         if smoothed_vowel in self._data:
             self.trigger_morph(smoothed_vowel)
@@ -559,7 +687,7 @@ class IntegratedCanvas(QWidget):
         # 키 가이드
         p.setPen(QPen(QColor(60, 60, 60), 1))
         p.setFont(QFont("Consolas", 9))
-        guide = "1:아 2:어 3:오 4:우 5:으 6:이 7:에 0:해제  |  D: debug  |  ESC: quit"
+        guide = "1:아 2:어 3:오 4:우 5:으 6:이 7:에 0:해제  |  C: 캘리브  D: debug  |  ESC: quit"
         p.drawText(QRectF(12, h - 48, w - 24, 20), Qt.AlignmentFlag.AlignLeft, guide)
 
         p.end()
@@ -597,6 +725,13 @@ class DebugPanel(QWidget):
         self._recognized_vowel = "—"
         self._recognized_conf = 0.0
         self._model_status = "..."
+
+        # formant
+        self._f1 = 0.0
+        self._f2 = 0.0
+        self._formant_vowel = "—"
+        self._formant_conf = 0.0
+        self._formant_clf_ref = None
 
         # effect params (synced from canvas)
         self._pitch_ratio = 0.0
@@ -636,6 +771,15 @@ class DebugPanel(QWidget):
 
     def on_model_status(self, status):
         self._model_status = status
+
+    def set_formant_classifier(self, clf):
+        self._formant_clf_ref = clf
+
+    def on_formant_detected(self, vowel, conf, f1, f2):
+        self._formant_vowel = vowel
+        self._formant_conf = conf
+        self._f1 = f1
+        self._f2 = f2
 
     def sync_from_canvas(self, canvas):
         self._pitch_ratio = canvas._pitch_ratio
@@ -735,6 +879,12 @@ class DebugPanel(QWidget):
             vib_s = "---"
         stat("Vibrato", vib_s)
 
+        fmt_c = QColor(100, 255, 180) if self._formant_conf > 0.5 else QColor(100, 100, 100)
+        stat("Formant", f"{self._formant_vowel}  ({self._formant_conf:.0%})", fmt_c)
+        stat("F1 / F2", f"{self._f1:.0f} / {self._f2:.0f} Hz")
+        cal_s = "YES" if (self._formant_clf_ref and self._formant_clf_ref.is_calibrated) else "NO"
+        stat("Calibrated", cal_s)
+
         y += 4
         p.setPen(QPen(QColor(40, 40, 40)))
         p.drawLine(pad, y, w - pad, y)
@@ -767,6 +917,17 @@ class DebugPanel(QWidget):
         p.setPen(QPen(QColor(55, 55, 55)))
         p.setFont(QFont("Consolas", 8))
         p.drawText(pad, y + 10, self._model_status)
+        y += 20
+
+        # ── F1/F2 VOWEL SPACE ──
+        vs_h = 120
+        if y + vs_h + 10 < h:
+            p.setPen(QPen(QColor(90, 90, 90)))
+            p.setFont(QFont("Consolas", 9))
+            p.drawText(pad, y + 10, "VOWEL SPACE")
+            y += 16
+            self._draw_vowel_space(p, pad, y, dw, vs_h)
+            y += vs_h + 6
 
         p.end()
 
@@ -822,6 +983,38 @@ class DebugPanel(QWidget):
                 p.drawLine(QPointF(*prev), QPointF(px, py))
             prev = (px, py)
 
+    def _draw_vowel_space(self, p, x, y, w, h):
+        """F1/F2 모음 공간 미니맵."""
+        p.fillRect(QRectF(x, y, w, h), QColor(25, 25, 25))
+        f2_min, f2_max = 500, 2500
+        f1_min, f1_max = 150, 950
+
+        def to_px(f1_val, f2_val):
+            px = x + w - (f2_val - f2_min) / (f2_max - f2_min) * w
+            py = y + (f1_val - f1_min) / (f1_max - f1_min) * h
+            return float(px), float(py)
+
+        prototypes = (self._formant_clf_ref.prototypes
+                      if self._formant_clf_ref else DEFAULT_PROTOTYPES)
+
+        p.setFont(QFont("Consolas", 8))
+        for vowel, (f1_v, f2_v) in prototypes.items():
+            px, py = to_px(f1_v, f2_v)
+            if x <= px <= x + w and y <= py <= y + h:
+                p.setPen(QPen(QColor(50, 50, 50)))
+                p.drawEllipse(QPointF(px, py), 3, 3)
+                p.setPen(QPen(QColor(70, 70, 70)))
+                p.drawText(int(px + 5), int(py + 4), vowel)
+
+        if self._f1 > 0 and self._f2 > 0:
+            px, py = to_px(self._f1, self._f2)
+            color = (QColor(100, 255, 180) if self._formant_conf > 0.5
+                     else QColor(255, 200, 80))
+            p.setPen(QPen(color, 2))
+            p.setBrush(QBrush(color))
+            p.drawEllipse(QPointF(px, py), 5, 5)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
     def _draw_rms_history(self, p, x, y, w, h):
         pts = list(self._rms_history)
         n = len(pts)
@@ -853,7 +1046,8 @@ class DebugPanel(QWidget):
 #  메인 윈도우
 # ═══════════════════════════════════════════════════
 class IntegratedWindow(QWidget):
-    def __init__(self, glyph_data):
+    def __init__(self, glyph_data, formant_classifier=None,
+                 mfcc_classifier=None, bridge=None):
         super().__init__()
         self.setWindowTitle("VoiceTypo Integrated Demo")
         self.resize(1100, 700)
@@ -871,6 +1065,19 @@ class IntegratedWindow(QWidget):
         self._debug_visible = True
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+        # 분류기 참조
+        self._formant_clf = formant_classifier
+        self._mfcc_clf = mfcc_classifier
+        self._bridge = bridge
+
+        # 캘리브레이션
+        self._calibrating = False
+        self._cal = None
+        self._cal_vowel_idx = 0
+        self._cal_vowels_formant = ['아', '이', '우']  # 포먼트: corner vowels
+        self._cal_vowels_mfcc = ['아', '어', '오', '우', '으', '이', '에']  # MFCC: 전체
+        self._cal_vowels = self._cal_vowels_formant
+
         # sync effect params from canvas → debug panel (every frame)
         self._sync_timer = QTimer(self)
         self._sync_timer.timeout.connect(
@@ -882,10 +1089,84 @@ class IntegratedWindow(QWidget):
         self._debug_visible = not self._debug_visible
         self.debug_panel.setVisible(self._debug_visible)
 
+    def _start_calibration(self):
+        if self._bridge and self._bridge.method == AudioBridge.METHOD_MFCC:
+            # MFCC 캘리브레이션: 7모음 전체
+            self._cal_vowels = self._cal_vowels_mfcc
+            self._cal = None  # FormantCalibrator 사용 안 함
+            self._mfcc_clf.calibrate_start()
+            self._calibrating = True
+            self._cal_vowel_idx = 0
+            vowel = self._cal_vowels[0]
+            self.canvas._model_status = f"MFCC 캘리브레이션: '{vowel}' 발음하세요 (C: 다음)"
+            print(f"\n[MFCC 캘리브레이션 시작] '{vowel}' 발음하세요")
+        else:
+            # 포먼트 캘리브레이션: corner 3모음
+            self._cal_vowels = self._cal_vowels_formant
+            self._cal = FormantCalibrator(self._formant_clf)
+            self._calibrating = True
+            self._cal_vowel_idx = 0
+            vowel = self._cal_vowels[0]
+            self.canvas._model_status = f"캘리브레이션: '{vowel}' 발음하세요 (C: 다음)"
+            print(f"\n[캘리브레이션 시작] '{vowel}' 발음하세요")
+
+    def _next_calibration_vowel(self):
+        self._cal_vowel_idx += 1
+        is_mfcc = (self._bridge and
+                   self._bridge.method == AudioBridge.METHOD_MFCC)
+        prefix = "MFCC " if is_mfcc else ""
+
+        if self._cal_vowel_idx < len(self._cal_vowels):
+            vowel = self._cal_vowels[self._cal_vowel_idx]
+            self.canvas._model_status = (
+                f"{prefix}캘리브레이션: '{vowel}' 발음하세요 (C: 다음)")
+            print(f"[{prefix}캘리브레이션] '{vowel}' 발음하세요")
+        else:
+            self._calibrating = False
+            if is_mfcc:
+                success = self._mfcc_clf.calibrate_end()
+                if success:
+                    # 캘리브레이션 자동 저장
+                    cal_path = self._bridge._mfcc_cal_path
+                    self._mfcc_clf.save_calibration(cal_path)
+                self.canvas._model_status = (
+                    "MFCC+코사인 (캘리브레이션 완료)" if success
+                    else "MFCC 캘리브레이션 실패 — C키로 재시도")
+            else:
+                success = self._cal.apply()
+                self.canvas._model_status = (
+                    "포먼트 분류기 (캘리브레이션 완료)" if success
+                    else "캘리브레이션 실패 — C키로 재시도")
+                self._cal = None
+
+    def _on_formant_for_calibration(self, vowel, conf, f1, f2):
+        if not self._calibrating:
+            return
+        target = self._cal_vowels[self._cal_vowel_idx]
+        if self._cal:
+            # 포먼트 캘리브레이션
+            self._cal.record_frame(target, f1, f2)
+
+    def _on_raw_audio_for_calibration(self, chunk):
+        """MFCC 캘리브레이션용 raw audio 수신."""
+        if not self._calibrating or self._cal is not None:
+            return  # 포먼트 캘리브레이션 중이면 무시
+        target = self._cal_vowels[self._cal_vowel_idx]
+        self._mfcc_clf.calibrate_feed(target, chunk)
+
     def keyPressEvent(self, e):
         k = e.key()
         if k == Qt.Key.Key_Escape:
             self.close()
+            return
+        if k == Qt.Key.Key_M and self._bridge:
+            self._bridge.switch_method()
+            return
+        if k == Qt.Key.Key_C:
+            if not self._calibrating:
+                self._start_calibration()
+            else:
+                self._next_calibration_vowel()
             return
         if k == Qt.Key.Key_D:
             self._toggle_debug()
@@ -913,49 +1194,44 @@ def main():
     glyph_data = load_glyph_data()
     print("Done.", flush=True)
 
-    # 오디오 브릿지 (피치/VAD/비브라토)
+    # 오디오 브릿지 (피치/VAD/비브라토 + 분류기)
     bridge = AudioBridge()
     capture = AudioCapture()
     capture.add_listener(bridge.on_audio)
 
-    # 발화 수집기
-    collector = UtteranceCollector(sr=44100)
-    capture.add_listener(collector.on_audio)
-
-    # 모음 인식 워커
-    worker = VowelRecognitionWorker()
-
     # 윈도우
-    win = IntegratedWindow(glyph_data)
+    win = IntegratedWindow(glyph_data,
+                            formant_classifier=bridge.formant_classifier,
+                            mfcc_classifier=bridge.mfcc_classifier,
+                            bridge=bridge)
+
+    # 캔버스에 bridge 참조 설정 (로그에 method 기록용)
+    win.canvas._bridge = bridge
+
+    # 캔버스 연결
     bridge.updated.connect(win.canvas.on_voice_data)
-    worker.recognized.connect(win.canvas.on_vowel_recognized)
-    worker.status_changed.connect(win.canvas.on_model_status)
+
+    # 모음 인식 → 캔버스 + 캘리브레이션
+    bridge.vowel_detected.connect(
+        lambda v, c, f1, f2: win.canvas.on_vowel_recognized(v, c))
+    bridge.vowel_detected.connect(win._on_formant_for_calibration)
+    bridge.raw_audio.connect(win._on_raw_audio_for_calibration)
+
+    # 방식 전환 → 상태 표시
+    bridge.method_changed.connect(win.canvas.on_model_status)
+    bridge.method_changed.connect(win.debug_panel.on_model_status)
+
+    init_status = "포먼트 분류기 (M키: 전환, C키: 캘리브레이션)"
+    win.canvas.on_model_status(init_status)
 
     # 디버그 패널 연결
     bridge.updated.connect(win.debug_panel.on_voice_data)
     bridge.spectrum_updated.connect(win.debug_panel.on_spectrum)
-    worker.recognized.connect(win.debug_panel.on_vowel_recognized)
-    worker.status_changed.connect(win.debug_panel.on_model_status)
-
-    # 모델 로딩 (백그라운드)
-    def load_and_run():
-        worker.load_models()
-        worker.process_loop()
-
-    model_thread = threading.Thread(target=load_and_run, daemon=True)
-    model_thread.start()
-
-    # 발화 → 인식 폴링 (100ms 주기)
-    poll_timer = QTimer()
-
-    def poll_utterance():
-        utt = collector.get_utterance()
-        if utt is not None and RECOGNITION_AVAILABLE:
-            worker.submit(utt, 44100)
-
-    poll_timer.timeout.connect(poll_utterance)
-    poll_timer.setInterval(50)
-    poll_timer.start()
+    bridge.vowel_detected.connect(win.debug_panel.on_formant_detected)
+    bridge.vowel_detected.connect(
+        lambda v, c, f1, f2: win.debug_panel.on_vowel_recognized(v, c))
+    win.debug_panel.set_formant_classifier(bridge.formant_classifier)
+    win.debug_panel.on_model_status(init_status)
 
     # 마이크 시작
     capture.start()
@@ -964,29 +1240,42 @@ def main():
     win.show()
     ret = app.exec()
 
-    worker.stop()
     capture.stop()
-    poll_timer.stop()
+    bridge._xlsr_worker.stop()
 
     # 테스트 로그 저장
     log = win.canvas._gt_log
     if log:
         from datetime import datetime
+        from collections import Counter as LogCounter
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         log_path = os.path.join(os.path.dirname(__file__), f'live_test_{ts}.csv')
         with open(log_path, 'w', encoding='utf-8') as f:
-            f.write('time,gt,pred,conf\n')
-            for t, g, p, c in log:
-                f.write(f'{t},{g},{p},{c:.4f}\n')
+            f.write('time,gt,pred,conf,method\n')
+            for entry in log:
+                t, g, p, c = entry[0], entry[1], entry[2], entry[3]
+                m = entry[4] if len(entry) > 4 else 'unknown'
+                f.write(f'{t},{g},{p},{c:.4f},{m}\n')
 
-        correct = sum(1 for _, g, p, _ in log if g == p)
+        correct = sum(1 for r in log if r[1] == r[2])
         total = len(log)
         print(f'\n{"="*50}')
         print(f'  테스트 결과: {correct}/{total} ({correct/total*100:.1f}%)')
-        vowels_tested = sorted(set(g for _, g, _, _ in log))
+
+        # 방식별 정확도
+        methods_used = sorted(set(r[4] if len(r) > 4 else 'unknown' for r in log))
+        if len(methods_used) > 1 or methods_used[0] != 'unknown':
+            print(f'\n  방식별:')
+            for m in methods_used:
+                mr = [r for r in log if (r[4] if len(r) > 4 else 'unknown') == m]
+                mc = sum(1 for r in mr if r[1] == r[2])
+                print(f'    {m}: {mc}/{len(mr)} ({mc/len(mr)*100:.1f}%)')
+
+        # 모음별
+        vowels_tested = sorted(set(r[1] for r in log))
         for v in vowels_tested:
-            vr = [(g, p) for _, g, p, _ in log if g == v]
-            vc = sum(1 for g, p in vr if g == p)
+            vr = [r for r in log if r[1] == v]
+            vc = sum(1 for r in vr if r[1] == r[2])
             print(f'    {v}: {vc}/{len(vr)}')
         print(f'  저장: {log_path}')
         print(f'{"="*50}')
