@@ -1,8 +1,0 @@
-Speaker ID: M_20s
-Gender: Male
-Age: 20s
-Dialect: Unknown
-Recording date: 2026-03-10
-Source session: session_20260310_153047
-Files: 우_01~05.wav (총 5개)
-Note: 우만 녹음됨. 남성 화자로서 여성 화자와의 오/우 음향 특성 비교 용도.
