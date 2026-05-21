@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.npz
+*.pt
+*.bin
+*.safetensors
+*.egg-info/
+dist/
+build/
+.env
+*.png
