@@ -1,0 +1,257 @@
+/* =============================================================
+   VoiceTypo Textbook Design System — colors & typography
+   Foundation: Stripe design language, customized for a Korean
+   voice-signal-processing textbook.
+   ============================================================= */
+
+/* ---------- Fonts ----------
+   Unified typography system using Pretendard for all sans text
+   (Korean + Latin — Pretendard ships full Latin glyphs so there
+   is no baseline jump on mixed-script lines). JetBrains Mono for
+   code, with D2Coding as the Korean-aware fallback.
+
+   All fonts are free, web-hostable, and served from CDNs.
+   Stripe's typographic principles — weight 300 headlines, tight
+   negative letter-spacing at display sizes, 'ss01' where the
+   face supports it — are preserved.
+*/
+
+/* Pretendard Variable (sans — Korean + Latin) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css');
+
+/* JetBrains Mono (code — Latin) */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* D2Coding (code — Korean-aware fallback) */
+@import url('https://cdn.jsdelivr.net/gh/wan2land/d2coding/d2coding.css');
+
+:root {
+  /* ---------- Brand ---------- */
+  --vt-purple:            #533afd;   /* primary / CTA / accent */
+  --vt-purple-hover:      #4434d4;
+  --vt-purple-deep:       #2e2b8c;
+  --vt-purple-mid:        #665efd;
+  --vt-purple-light:      #b9b9f9;
+  --vt-purple-soft:       #d6d9fc;
+  --vt-purple-tint:       #F5F3FF;   /* "내 코드에서는" 박스 배경 */
+  --vt-brand-dark:        #1c1e54;
+
+  /* ---------- Neutrals ---------- */
+  --vt-white:             #ffffff;
+  --vt-heading:           #061b31;   /* deep navy — headings */
+  --vt-label:             #273951;   /* dark slate — labels */
+  --vt-body:              #64748d;   /* slate — body text */
+  --vt-border:            #e5edf5;
+  --vt-surface-muted:     #F6F9FC;   /* 수식 / 확인 질문 박스 배경 */
+  --vt-code-bg:           #0D253D;   /* code block dark navy */
+  --vt-dark-neutral:      #0d253d;
+
+  /* ---------- Accent (decorative only — not interactive) ---------- */
+  --vt-ruby:              #ea2261;
+  --vt-magenta:           #f96bee;
+  --vt-magenta-light:     #ffd7ef;
+  --vt-success:           #15be53;
+  --vt-success-text:      #108c3d;
+  --vt-lemon:             #9b6829;
+
+  /* ---------- Shadows (blue-tinted, multi-layer) ---------- */
+  --vt-shadow-blue:       rgba(50, 50, 93, 0.25);
+  --vt-shadow-dark-blue:  rgba(3, 3, 39, 0.25);
+  --vt-shadow-black:      rgba(0, 0, 0, 0.1);
+  --vt-shadow-ambient:    rgba(23, 23, 23, 0.08);
+  --vt-shadow-soft:       rgba(23, 23, 23, 0.06);
+
+  --vt-elev-1: 0 3px 6px var(--vt-shadow-soft);
+  --vt-elev-2: 0 15px 35px var(--vt-shadow-ambient);
+  --vt-elev-3: var(--vt-shadow-blue) 0 30px 45px -30px,
+               var(--vt-shadow-black) 0 18px 36px -18px;
+  --vt-elev-4: var(--vt-shadow-dark-blue) 0 14px 21px -14px,
+               var(--vt-shadow-black) 0 8px 17px -8px;
+
+  /* ---------- Radii ---------- */
+  --vt-radius-1: 1px;
+  --vt-radius-4: 4px;   /* workhorse: buttons, inputs, badges */
+  --vt-radius-5: 5px;
+  --vt-radius-6: 6px;
+  --vt-radius-8: 8px;
+
+  /* ---------- Spacing scale (8px base, dense at small end) ---------- */
+  --vt-s-1:  1px;
+  --vt-s-2:  2px;
+  --vt-s-4:  4px;
+  --vt-s-6:  6px;
+  --vt-s-8:  8px;
+  --vt-s-10: 10px;
+  --vt-s-12: 12px;
+  --vt-s-14: 14px;
+  --vt-s-16: 16px;
+  --vt-s-18: 18px;
+  --vt-s-20: 20px;
+  --vt-s-24: 24px;
+  --vt-s-32: 32px;
+  --vt-s-48: 48px;
+  --vt-s-64: 64px;
+
+  /* ---------- Fonts ---------- */
+  --vt-font-sans: 'Pretendard Variable', Pretendard,
+                  -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
+                  'Malgun Gothic', system-ui, sans-serif;
+  --vt-font-mono: 'JetBrains Mono', 'D2Coding', 'SFMono-Regular',
+                  Menlo, Consolas, monospace;
+  --vt-font-korean: 'Pretendard Variable', Pretendard,
+                    'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+
+  /* Display sizes */
+  --vt-size-hero:        3.50rem;  /* 56 */
+  --vt-size-display:     3.00rem;  /* 48 */
+  --vt-size-section:     2.00rem;  /* 32 */
+  --vt-size-sub-lg:      1.63rem;  /* 26 */
+  --vt-size-sub:         1.38rem;  /* 22 */
+  --vt-size-body-lg:     1.13rem;  /* 18 */
+  --vt-size-body:        1.00rem;  /* 16 */
+  --vt-size-button-sm:   0.88rem;  /* 14 */
+  --vt-size-caption:     0.81rem;  /* 13 */
+  --vt-size-caption-sm:  0.75rem;  /* 12 */
+  --vt-size-micro:       0.63rem;  /* 10 */
+
+  /* Line heights */
+  --vt-lh-tight:     1.10;
+  --vt-lh-snug:      1.15;
+  --vt-lh-default:   1.40;
+  --vt-lh-relaxed:   1.60;
+  --vt-lh-code:      2.00;
+  --vt-lh-korean:    1.75;         /* Korean body reads better looser */
+}
+
+/* =============================================================
+   Semantic element styles
+   ============================================================= */
+
+html, body {
+  font-family: var(--vt-font-sans);
+  /* Pretendard does not expose an 'ss01' set; the declaration is kept
+     as a no-op so authored markup stays consistent with the spec and
+     will light up automatically if a future sans family supports it. */
+  font-feature-settings: "ss01";
+  color: var(--vt-label);
+  background: var(--vt-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Display: chapter titles */
+.vt-h-hero,
+.vt-display-hero {
+  font-family: var(--vt-font-sans);
+  font-size: var(--vt-size-hero);
+  font-weight: 300;
+  line-height: 1.03;
+  letter-spacing: -1.4px;
+  color: var(--vt-heading);
+  font-feature-settings: "ss01";
+}
+
+h1, .vt-h1, .vt-display-large {
+  font-family: var(--vt-font-sans);
+  font-size: var(--vt-size-display);
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: -0.96px;
+  color: var(--vt-heading);
+  font-feature-settings: "ss01";
+}
+
+h2, .vt-h2, .vt-section-heading {
+  font-size: var(--vt-size-section);
+  font-weight: 300;
+  line-height: 1.10;
+  letter-spacing: -0.64px;
+  color: var(--vt-heading);
+  font-feature-settings: "ss01";
+}
+
+h3, .vt-h3, .vt-sub-lg {
+  font-size: var(--vt-size-sub-lg);
+  font-weight: 300;
+  line-height: 1.12;
+  letter-spacing: -0.26px;
+  color: var(--vt-heading);
+  font-feature-settings: "ss01";
+}
+
+h4, .vt-h4, .vt-sub {
+  font-size: var(--vt-size-sub);
+  font-weight: 300;
+  line-height: 1.10;
+  letter-spacing: -0.22px;
+  color: var(--vt-heading);
+  font-feature-settings: "ss01";
+}
+
+p, .vt-body {
+  font-size: var(--vt-size-body);
+  font-weight: 400;
+  line-height: var(--vt-lh-korean);
+  color: var(--vt-label);
+  font-feature-settings: "ss01";
+}
+
+.vt-body-lg, .vt-intro {
+  font-size: var(--vt-size-body-lg);
+  font-weight: 300;
+  line-height: 1.55;
+  color: var(--vt-label);
+  font-feature-settings: "ss01";
+}
+
+.vt-caption {
+  font-size: var(--vt-size-caption);
+  font-weight: 400;
+  color: var(--vt-body);
+  font-feature-settings: "ss01";
+}
+
+.vt-caption-sm {
+  font-size: var(--vt-size-caption-sm);
+  font-weight: 400;
+  color: var(--vt-body);
+  font-feature-settings: "ss01";
+}
+
+a, .vt-link {
+  color: var(--vt-purple);
+  text-decoration: none;
+  font-weight: 400;
+  transition: color 120ms ease;
+}
+a:hover, .vt-link:hover { color: var(--vt-purple-hover); }
+
+code, .vt-code, pre, .vt-pre {
+  font-family: var(--vt-font-mono);
+  font-size: var(--vt-size-caption-sm);
+  font-weight: 500;
+  line-height: var(--vt-lh-code);
+}
+
+.vt-code-label {
+  font-family: var(--vt-font-mono);
+  font-size: var(--vt-size-caption-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--vt-body);
+}
+
+/* Korean body — looser line-height */
+.vt-korean {
+  font-family: var(--vt-font-korean);
+  line-height: var(--vt-lh-korean);
+  word-break: keep-all;
+  font-feature-settings: "ss01";
+}
+
+/* Numerals in data contexts */
+.vt-tnum {
+  font-feature-settings: "tnum";
+  letter-spacing: -0.3px;
+}
