@@ -1,0 +1,13 @@
+data/raw/
+data/processed/
+data/checkpoints/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pt
+*.npz
+.DS_Store
+.idea/
+.vscode/
+*.log

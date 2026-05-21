@@ -1,0 +1,89 @@
+audio:
+  sample_rate: 16000
+  channels: 1
+
+vowels:
+  classes: ["a", "e", "i", "o", "u", "eu", "eo"]
+  jamo_map:
+    "ㅏ": "a"
+    "ㅔ": "e"
+    "ㅐ": "e"     # merged with ㅔ in modern standard Korean
+    "ㅣ": "i"
+    "ㅗ": "o"
+    "ㅜ": "u"
+    "ㅡ": "eu"
+    "ㅓ": "eo"
+  display:
+    a: "아"
+    e: "에"
+    i: "이"
+    o: "오"
+    u: "우"
+    eu: "으"
+    eo: "어"
+
+# Used at data-prep time only — extract timestamps for Hangul characters
+aligner:
+  model_id: "kresnik/wav2vec2-large-xlsr-korean"
+  ctc_frame_stride_ms: 20
+
+# Used at runtime — frozen feature extractor for the classifier
+encoder:
+  backend: "whisper"
+  model_id: "openai/whisper-base"
+  layer: -1
+  pool: "mean_std"   # concat mean and std across time
+
+extraction:
+  # take middle 60% of each Hangul syllable's CTC span as vowel core
+  segment_lo: 0.30
+  segment_hi: 0.90
+  min_segment_ms: 80
+  max_segment_ms: 350
+  per_vowel_target: 4000   # cap to keep classes balanced
+
+datasets:
+  train_pool:
+    - "zeroth_korean"
+    - "common_voice_ko"
+    - "fleurs_ko"
+  unseen_eval:
+    - "pansori_tedxkr"   # license blocks shipping but allows internal eval
+
+augment:
+  noise_snr_db: [5, 30]
+  pitch_semitones: [-4, 4]   # widened to cover children
+  time_stretch: [0.90, 1.10]
+  gain_db: [-12, 6]
+  reverb_prob: 0.30
+  noise_source: "musan"      # download separately; optional but recommended
+  specaug:
+    time_mask: 16
+    freq_mask: 8
+
+training:
+  batch_size: 256
+  epochs: 40
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  hidden_dim: 256
+  dropout: 0.3
+  early_stop_patience: 6
+  device: "cuda"             # falls back to cpu automatically
+  speaker_split:
+    val_frac: 0.10
+    test_frac: 0.15           # in-corpus held-out speakers
+    seed: 17
+
+eval:
+  primary_metric: "unseen_top1"   # measured on Pansori
+  thresholds:
+    unseen_top1: 0.90
+    per_vowel_f1: 0.85
+
+inference:
+  vad_threshold_db: -38
+  vad_hangover_ms: 250
+  segment_min_ms: 100
+  segment_max_ms: 1200
+  display_topk: 7
