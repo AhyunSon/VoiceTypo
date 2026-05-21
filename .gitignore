@@ -1,0 +1,36 @@
+# 가상환경 / 캐시
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# 음성 코퍼스
+*.wav
+*.flac
+*.mp3
+
+# 모델 가중치 / 학습 데이터
+*.npz
+*.pt
+*.pth
+*.pkl
+*.h5
+
+# 대용량 폴더
+data/
+results/
+external_data/
+*.tar.gz
+*.zip
+
+# 이미지 (진단 plot 등)
+*.png
+
+# 로컬 도구 설정
+.claude/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
