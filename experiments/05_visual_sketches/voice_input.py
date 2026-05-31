@@ -18,9 +18,11 @@ voice_input.py — 시각 스케치 공통 음성 입력 (마이크 → VoiceSig
   jitter 는 cycle-to-cycle 가 아니라 최근 F0 변동으로 근사한 값(시각용 proxy).
 """
 
+import json
 import threading
 import queue
 import time
+from pathlib import Path
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, Optional
@@ -44,6 +46,26 @@ VOWEL_REFS_MALE = {
 }
 VOWELS = list(VOWEL_REFS_FEMALE.keys())
 
+# 개인 캘리브레이션 기준값 (calibrate.py 가 만든 my_vowels.json). 있으면 평균값 대신 이걸 씀.
+_PERSONAL_REFS = None
+_PERSONAL_PATH = Path(__file__).resolve().parent / "my_vowels.json"
+
+
+def load_personal(path=None):
+    """my_vowels.json 로드 → 개인 모음 기준값 사용. 성공 시 dict 반환, 없으면 None."""
+    global _PERSONAL_REFS
+    p = Path(path) if path else _PERSONAL_PATH
+    try:
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        _PERSONAL_REFS = {k: (float(v[0]), float(v[1])) for k, v in d.items()
+                          if v and v[0] and v[1]}
+        if len(_PERSONAL_REFS) < 5:      # 너무 적으면 무시
+            _PERSONAL_REFS = None
+    except Exception:
+        _PERSONAL_REFS = None
+    return _PERSONAL_REFS
+
 
 def bark(f):
     """Hz → Bark (지각 척도). 화자간 비교에 Hz 보다 안정적."""
@@ -66,9 +88,13 @@ class VoiceSignal:
     vowel_weights: Dict[str, float] = field(default_factory=dict)  # 7모음 연속 가중치 합=1
 
 
-def _vowel_weights(f1, f2, f0, temp=2.0):
-    """F1/F2 → 7모음 연속 가중치 (Bark 거리 softmax). 합 = 1."""
-    refs = VOWEL_REFS_FEMALE if f0 >= GENDER_THRESH_HZ else VOWEL_REFS_MALE
+def _vowel_weights(f1, f2, f0, temp=1.6):
+    """F1/F2 → 7모음 연속 가중치 (Bark 거리 softmax). 합 = 1.
+    개인 캘리브레이션(my_vowels.json) 있으면 그 기준값 사용 → 본인 목소리에 정확."""
+    if _PERSONAL_REFS:
+        refs = _PERSONAL_REFS
+    else:
+        refs = VOWEL_REFS_FEMALE if f0 >= GENDER_THRESH_HZ else VOWEL_REFS_MALE
     b1, b2 = bark(f1), bark(f2)
     dists = np.array([
         np.hypot(b1 - bark(c1), b2 - bark(c2)) for (c1, c2) in refs.values()
@@ -81,7 +107,7 @@ def _vowel_weights(f1, f2, f0, temp=2.0):
 class VoiceListener:
     """마이크를 열고 백그라운드에서 분석. latest() 로 최신 신호를 읽는다."""
 
-    def __init__(self, chunk_sec=0.30, hop_sec=0.08, rms_gate=0.004):
+    def __init__(self, chunk_sec=0.30, hop_sec=0.08, rms_gate=0.013):
         self.chunk_n = int(chunk_sec * SAMPLE_RATE)
         self.hop_n = int(hop_sec * SAMPLE_RATE)
         self.rms_gate = rms_gate

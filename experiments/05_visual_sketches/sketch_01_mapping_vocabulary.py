@@ -60,7 +60,7 @@ def main():
             if sig.f0 > 0:  s["f0"] = lerp(s["f0"], sig.f0, a)
             if sig.f1 > 0:  s["f1"] = lerp(s["f1"], sig.f1, a)
             if sig.f2 > 0:  s["f2"] = lerp(s["f2"], sig.f2, a)
-            s["jit"] = lerp(s["jit"], sig.jit, a)
+            s["jit"] = lerp(s["jit"], sig.jitter, a)
         else:
             s["rms"] = lerp(s["rms"], 0.0, 0.08)
 

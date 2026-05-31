@@ -69,7 +69,7 @@ def main():
             if sig.vowel:
                 cur = sig.vowel
             rms_s = lerp(rms_s, min(1.0, sig.rms * 16), 0.2)
-            jit_s = lerp(jit_s, sig.jit, 0.2)
+            jit_s = lerp(jit_s, sig.jitter, 0.2)
             if sig.f0 > 0:
                 f0n_s = lerp(f0n_s, max(0, min(1, (sig.f0 - 80) / 240)), 0.2)
         else:

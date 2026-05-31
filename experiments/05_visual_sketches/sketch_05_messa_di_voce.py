@@ -89,7 +89,7 @@ def main():
                     vx=math.cos(ang) * spd + 1.2,
                     vy=math.sin(ang) * spd - (f0n - 0.5) * 4.0,   # Pitch → 떠오름/가라앉음
                     r=4 + rms * 34, col=col, life=1.0,
-                    jit=sig.jit, vowel=dom, stamp=(rms > 0.5),
+                    jit=sig.jitter, vowel=dom, stamp=(rms > 0.5),
                 ))
 
         # ── 갱신 ──
