@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>VoiceTypo · web (p5.js)</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js"></script>
+<style>body{margin:0;background:#0a0a10;color:#aab;font-family:sans-serif}
+#hint{position:fixed;top:10px;left:12px;font-size:13px;opacity:.8}</style>
+</head>
+<body>
+<div id="hint">bridge.py 실행 후 이 페이지 열기 · F1→높이 F2→폭 Pitch→회전 Volume→크기 모음→형태</div>
+<script>
+// 같은 매핑을 브라우저(p5.js)에서. sketch_02 의 웹 버전.
+const VOWELS = ["아","어","오","우","으","이","에"];
+const JAMO = {"아":"ㅏ","어":"ㅓ","오":"ㅗ","우":"ㅜ","으":"ㅡ","이":"ㅣ","에":"ㅔ"};
+const COL  = {"아":[255,90,90],"어":[200,105,240],"오":[90,230,130],"우":[80,200,240],
+              "으":[110,145,240],"이":[240,240,90],"에":[255,175,60]};
+let data = {voiced:false, f1:500,f2:1500,f0:160,rms:0, weights:{}};
+let sm = {f1:500,f2:1500,f0:160,rms:0};
+let w = {}; VOWELS.forEach(v=>w[v]=0);
+
+function connect(){
+  const ws = new WebSocket("ws://localhost:8765");
+  ws.onmessage = e => data = JSON.parse(e.data);
+  ws.onclose = () => setTimeout(connect, 1000);  // 끊기면 재연결
+}
+const clamp01 = x => Math.max(0, Math.min(1, x));
+const lerp = (a,b,t) => a+(b-a)*t;
+
+function setup(){ createCanvas(windowWidth, windowHeight); textAlign(CENTER,CENTER); connect(); }
+function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
+
+function draw(){
+  background(10,10,16);
+  const voiced = data.voiced;
+  sm.rms = lerp(sm.rms, voiced ? Math.min(1, data.rms*16):0, 0.2);
+  if(voiced){
+    if(data.f1>0) sm.f1=lerp(sm.f1,data.f1,0.25);
+    if(data.f2>0) sm.f2=lerp(sm.f2,data.f2,0.25);
+    if(data.f0>0) sm.f0=lerp(sm.f0,data.f0,0.25);
+  }
+  VOWELS.forEach(v=> w[v]=lerp(w[v], (voiced&&data.weights)?(data.weights[v]||0):0, 0.22));
+
+  const f1n=clamp01((sm.f1-250)/750), f2n=clamp01((sm.f2-600)/2200), f0n=clamp01((sm.f0-80)/240);
+  push();
+  translate(width/2, height/2 - 20);
+  rotate((f0n-0.5)*0.7);                         // Pitch → 회전
+  const size = (0.55 + 1.25*sm.rms);
+  scale(lerp(0.55,1.7,f2n)*size, lerp(0.55,1.7,f1n)*size);  // F2→폭, F1→높이, Vol→크기
+  // 모음 → 형태: 가중치로 자모 겹쳐 그림
+  VOWELS.slice().sort((a,b)=>w[a]-w[b]).forEach(v=>{
+    if(w[v]<0.04) return;
+    const c = COL[v];
+    fill(c[0],c[1],c[2], 255*Math.min(1,w[v]*1.5));
+    textSize(240);
+    text(JAMO[v], 0, 0);
+  });
+  pop();
+
+  // 7모음 가중치 막대
+  const bw = width/VOWELS.length;
+  VOWELS.forEach((v,i)=>{ const c=COL[v]; fill(c[0],c[1],c[2]);
+    const h=w[v]*110; noStroke(); rect(i*bw+14, height-28-h, bw-28, h);
+    fill(c[0],c[1],c[2]); textSize(16); text(v, i*bw+bw/2, height-14); });
+
+  fill(180); textSize(14); textAlign(LEFT);
+  text(voiced ? `우세: ${VOWELS.reduce((a,b)=>w[a]>w[b]?a:b)}`:"(말해보세요 · bridge.py 실행 필요)", 14, 36);
+  textAlign(CENTER,CENTER);
+}
+</script>
+</body>
+</html>

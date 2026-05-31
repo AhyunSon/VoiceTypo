@@ -1,0 +1,7 @@
+# 05 시각 스케치 의존성 (02_formant venv 와 동일 + websockets)
+numpy>=1.24
+sounddevice>=0.4.6
+praat-parselmouth>=0.4.7
+pygame>=2.6
+websockets>=12       # web_p5js/bridge.py 전송 레이어
+setuptools<81        # pyworld 가 pkg_resources 사용(02_formant 와 동일 제약)
