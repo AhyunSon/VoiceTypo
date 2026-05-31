@@ -1,0 +1,12 @@
+# 02_formant 의존성 (코드 import 기준 정리, Python 3.12 검증)
+numpy>=1.24
+scipy>=1.11
+scikit-learn>=1.3
+joblib>=1.3
+praat-parselmouth>=0.4.7   # Praat Burg 포먼트 추출
+pyworld>=0.3.5             # F0/스펙트럼 분석
+sounddevice>=0.4.6         # 실시간 마이크 입력
+pygame>=2.6               # 사운드/시각화
+PySide6>=6.6              # Qt GUI
+pyqtgraph>=0.13            # 실시간 플롯
+setuptools<81             # pyworld 가 pkg_resources 사용 → 81 이상에서 제거됨
