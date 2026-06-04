@@ -1,0 +1,63 @@
+method_5: Whisper 기반
+========================
+
+이것은 무엇인가:
+  OpenAI의 범용 음성 인식 모델.
+  다국어 지원, 한국어 포함. 텍스트 전사(transcription) 모델이지만
+  중간 특성을 활용하거나, 전사 결과에서 모음을 추출할 수 있음.
+
+두 가지 접근법:
+
+  [방법 A] 전사 결과에서 모음 추출
+    1. 0.5~1초 오디오 청크를 Whisper에 입력
+    2. 전사 결과: "아" / "어" / "오" 등
+    3. 결과 텍스트에서 모음 판별
+    장점: 구현 간단
+    단점: 모델이 "아"라고 전사할지 보장 없음 (지속 모음은 학습 데이터에 적음)
+
+  [방법 B] Whisper 인코더 특성 + 분류기
+    1. Whisper 인코더만 사용 (디코더 제외)
+    2. 인코더 출력(특성 벡터)을 SVM/MLP에 입력
+    3. 모음 분류
+    장점: 화자 독립적 특성, 높은 정확도
+    단점: 여전히 무거움, fine-tuning 필요
+
+모델 크기별 옵션:
+  - whisper-tiny:   39M params, ~150MB  (가장 가벼움)
+  - whisper-base:   74M params, ~290MB
+  - whisper-small:  244M params, ~960MB
+  - whisper-medium: 769M params, ~3GB
+  -> tiny 또는 base가 실시간 용도에 적합
+
+장점:
+  - 한국어 네이티브 지원
+  - 화자 독립적
+  - 노이즈에 매우 강함
+  - 검증된 모델 (가장 널리 사용되는 음성 인식 모델)
+
+단점:
+  - 지연: 500ms+ (tiny도 300ms+)
+  - 전사 모델이라 지속 모음 인식에 최적화 안 됨
+  - "아~~~~"를 "아"로 전사할지 불확실
+  - GPU 없으면 느림
+
+필요 라이브러리:
+  openai-whisper     - 공식 패키지 (pip install openai-whisper)
+  또는
+  transformers       - HuggingFace 버전
+  torch              - PyTorch 백엔드
+  sounddevice        - 마이크 입력
+  faster-whisper     - CTranslate2 기반 최적화 버전 (선택, 더 빠름)
+
+구현할 파일:
+  model.py       - Whisper 모델 로드 + 추론
+  classifier.py  - 전사 결과 -> 모음 매핑
+  test.py        - 마이크 입력으로 실시간 테스트
+
+예상 정확도: 95%+ (방법 B), 불확실 (방법 A)
+지연: 300-500ms+ (모델 크기에 따라)
+모델 크기: 150MB (tiny) ~ 3GB (medium)
+
+비고:
+  faster-whisper (CTranslate2 기반) 사용 시 속도 2-4배 향상 가능
+  https://github.com/SYSTRAN/faster-whisper

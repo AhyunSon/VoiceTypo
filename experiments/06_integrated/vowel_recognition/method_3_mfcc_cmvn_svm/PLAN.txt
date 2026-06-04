@@ -1,0 +1,55 @@
+method_3: MFCC + CMVN + SVM  [현재 추천]
+==========================================
+
+이것은 무엇인가:
+  method_1(HTML 원본)의 두 가지 핵심 약점을 보완한 버전.
+  같은 MFCC 특성을 쓰되, 화자 정규화(CMVN)와 분류기(SVM)를 개선.
+
+method_1과 뭐가 다른가:
+
+  [개선 1] CMVN (Cepstral Mean Variance Normalization)
+    - method_1: raw MFCC 그대로 비교 -> 화자/볼륨/피치 변화에 민감
+    - method_3: MFCC에서 슬라이딩 윈도우 평균을 빼고 분산으로 나눔
+    - 효과: 화자 고유 특성, 마이크 특성, 볼륨 변화가 자동 상쇄
+    - 수식: normalized[i] = (mfcc[i] - mean[i]) / std[i]
+
+  [개선 2] SVM 분류기 (코사인 거리 대체)
+    - method_1: 코사인 거리 -> 선형 경계 -> 겹치는 모음 구분 못함
+    - method_3: SVM (RBF 커널) -> 비선형 결정 경계 -> 겹침 영역 분리 가능
+    - 캘리브레이션 데이터로 즉석 학습 (scikit-learn)
+
+  [개선 3] Silero VAD (수동 VAD 대체)
+    - method_1: RMS + 피치 존재 여부로 판단 (단순 룰)
+    - method_3: Silero VAD (딥러닝 기반, <1ms, 1.5MB 모델)
+    - 수천 개 언어/환경에서 학습됨 -> 정확도 훨씬 높음
+
+작동 원리:
+  1. Silero VAD로 음성 구간 감지
+  2. 음성 구간에서 MFCC 추출 (13계수)
+  3. CMVN 적용 (슬라이딩 윈도우 or 글로벌)
+  4. SVM.predict() -> 모음 + 확률 (신뢰도)
+  5. 디바운싱 (연속 N프레임 동일해야 전환)
+
+캘리브레이션 흐름:
+  1. "아~ 해보세요" (2초) -> CMVN 적용된 MFCC 벡터 50~100개 수집
+  2. "어~ 해보세요" (2초) -> ...
+  3. ... 8개 모음 반복
+  4. scikit-learn SVM.fit() <- 총 400~800개 벡터 (~50ms에 학습 완료)
+  5. 모델 + CMVN 통계를 json으로 저장
+
+필요 라이브러리:
+  numpy                    - MFCC 계산
+  scikit-learn             - SVM 분류기 (pip install scikit-learn)
+  silero-vad               - VAD (pip install silero-vad)
+  torch                    - Silero VAD 의존성
+  speechpy (선택)          - MFCC+CMVN 올인원 (pip install speechpy)
+
+구현할 파일:
+  features.py    - MFCC 추출 + CMVN 정규화
+  vad.py         - Silero VAD 래퍼
+  classifier.py  - SVM 학습/추론 + 캘리브레이션 관리
+  test.py        - 마이크 입력으로 실시간 테스트
+
+예상 정확도: 91-96% (캘리브레이션 후)
+지연: <1ms (추론), ~50ms (학습)
+모델 크기: SVM <1MB + Silero VAD 1.5MB

@@ -1,0 +1,37 @@
+audio_capture - 마이크 실시간 입력
+====================================
+
+역할:
+  마이크에서 오디오 스트림을 실시간으로 캡처하여
+  다른 모듈(pitch_detection, vowel_recognition)에 전달
+
+구현할 파일:
+  capture.py
+
+라이브러리:
+  sounddevice  (pip install sounddevice)
+
+선택 이유:
+  - 콜백 기반: 오디오 청크 도착 시 자동 호출
+  - numpy 배열로 바로 받음 (추가 변환 불필요)
+  - Windows/Mac/Linux 모두 지원
+  - pyaudio 대비 설치 쉽고 API 깔끔
+  - 실시간 스트리밍에 최적화
+
+핵심 파라미터 (HTML 원본 기준):
+  - sample_rate: 44100 또는 48000 (기기 기본값)
+  - channels: 1 (모노)
+  - blocksize: 2048 (약 46ms @44100Hz)
+    -> pitch_detection 과 mfcc 모두 이 크기로 처리
+  - dtype: float32
+
+구현 포인트:
+  - sounddevice.InputStream 콜백에서 numpy 배열 받음
+  - Queue 또는 콜백 함수로 다른 모듈에 전달
+  - UI 스레드와 분리 (Qt Signal 또는 threading.Queue)
+  - 시작/정지 제어
+  - 디바이스 선택 기능 (선택사항)
+
+HTML 원본 대응:
+  navigator.mediaDevices.getUserMedia() -> sounddevice.InputStream
+  AudioContext.createMediaStreamSource() -> 콜백에서 직접 numpy 배열 전달

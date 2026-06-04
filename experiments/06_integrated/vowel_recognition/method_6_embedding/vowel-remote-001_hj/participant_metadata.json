@@ -1,0 +1,15 @@
+{
+  "projectName": "한국어 지속 모음 수집",
+  "projectCode": "vowel-remote-001",
+  "ownerContact": "이메일 또는 연락처를 입력하세요",
+  "participantName": "HJ",
+  "participantId": "HJ",
+  "gender": "여성",
+  "ageGroup": "60대",
+  "device": "Pillar",
+  "environment": "거실",
+  "notes": "",
+  "exportedAt": "2026-03-15T11:31:42.404Z",
+  "totalPrompts": 70,
+  "completedCount": 70
+}

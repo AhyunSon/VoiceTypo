@@ -67,6 +67,11 @@ def load_personal(path=None):
     return _PERSONAL_REFS
 
 
+# 모듈 로드 시 개인 보정값(my_vowels.json)이 있으면 자동 적용 →
+# calibrate.py 로 만든 본인 기준값을 스케치/허브가 자동으로 사용한다.
+load_personal()
+
+
 def bark(f):
     """Hz → Bark (지각 척도). 화자간 비교에 Hz 보다 안정적."""
     f = np.asarray(f, dtype=float)

@@ -1,0 +1,28 @@
+text_morphing - SDF 글리프 모핑 [이미 구현됨]
+===============================================
+
+상태: 구현 완료 (glyph_morph_sdf_final_v2.py)
+
+역할:
+  한글 모음 글리프 간 SDF(Signed Distance Field) 기반 모핑 애니메이션
+  모음이 바뀔 때 부드럽게 전환되는 시각 효과
+
+현재 동작:
+  - 7개 모음 SVG 파일 로드 (아, 이, 우, 에, 오, 으, 어)
+  - 초성/중성 분리 (fill-rule 기반)
+  - 획 태깅: (orientation, length_class) = (V/H, long/short)
+  - 태그 기반 획 매칭 -> 공통 획은 warp 모핑, 비공통 획은 흡수/방출
+  - 키보드 1-7로 모음 선택 -> 0.45초 모핑 애니메이션
+
+통합 시 변경 필요:
+  - 현재: 독립 실행 (자체 QWidget + QApplication)
+  - 통합: ui/main_window.py 에서 import해서 사용
+  - GlyphData, _blend_glyphs, _sdf_to_qimage 등을 외부에서 호출 가능하게
+  - 키보드 트리거 -> vowel_recognition 결과로 자동 트리거
+
+파일:
+  glyph_morph_sdf_final_v2.py  - 메인 코드
+  *_그룹_분리.svg              - 7개 모음 SVG (같은 폴더)
+
+의존성:
+  PySide6, numpy, scipy

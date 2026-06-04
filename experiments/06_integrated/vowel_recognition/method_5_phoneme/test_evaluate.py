@@ -1,0 +1,482 @@
+"""Method 5 (Phoneme) 정량 평가 스크립트.
+
+사용법:
+  # 1) 데이터셋 폴더의 오디오 파일로 평가
+  python -m vowel_recognition.method_5_phoneme.test_evaluate eval --audio_dir vowel_recognition/dataset
+
+  # 2) 필터링: 특정 화자, 조건만
+  python -m vowel_recognition.method_5_phoneme.test_evaluate eval --audio_dir vowel_recognition/dataset --speaker 김동규
+  python -m vowel_recognition.method_5_phoneme.test_evaluate eval --audio_dir vowel_recognition/dataset --condition 클린
+
+  # 3) 마이크로 녹음하여 평가용 wav 파일 생성
+  python -m vowel_recognition.method_5_phoneme.test_evaluate record --out_dir eval_samples
+
+  # 4) 실시간 마이크 평가 (안내에 따라 발음 → 즉시 채점)
+  python -m vowel_recognition.method_5_phoneme.test_evaluate live
+
+파일 명명 규칙 (dataset):
+  {음절}_{성별}_{화자}_{번호}_{조건}_{피치}.mp3
+  예: 가_남_김동규_13_클린_플랫.mp3 → 모음 '아'
+  또는 단순: {모음}_{번호}.wav  예: 아_1.wav
+"""
+
+import sys
+import os
+import argparse
+import time
+import wave
+import io
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+VOWELS = ["아", "어", "오", "우", "으", "이", "에", "애"]
+SR = 44100
+
+# 한글 유니코드 모음 인덱스 → 단모음 매핑
+# 중성(모음) 순서: ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ
+_MEDIAL_TO_VOWEL = {
+    0: '아',   # ㅏ
+    1: '애',   # ㅐ
+    4: '어',   # ㅓ
+    5: '에',   # ㅔ
+    8: '오',   # ㅗ
+    13: '우',  # ㅜ
+    18: '으',  # ㅡ
+    20: '이',  # ㅣ
+}
+
+
+def syllable_to_vowel(ch):
+    """한글 음절 → 단모음 추출. 복합모음이면 None."""
+    code = ord(ch) - 0xAC00
+    if code < 0 or code > 11171:
+        return None
+    medial = (code % (28 * 21)) // 28
+    return _MEDIAL_TO_VOWEL.get(medial)
+
+
+def load_model():
+    print("모델 로딩 중...", flush=True)
+    from vowel_recognition.method_5_phoneme.features import PhonemeVowelDetector
+    detector = PhonemeVowelDetector()
+    print("모델 로딩 완료.\n")
+    return detector
+
+
+def predict_vowel(detector, audio, sr):
+    """오디오에서 모음 예측. (예측 모음, 신뢰도, 전체 확률) 반환."""
+    probs = detector.get_vowel_probs(audio, sr)
+    if not probs:
+        return None, 0.0, {}
+    best = max(probs, key=probs.get)
+    total = sum(probs.values())
+    conf = probs[best] / total if total > 0 else 0.0
+    return best, conf, probs
+
+
+# ── 오디오 파일 I/O ──
+
+def save_wav(path, audio, sr):
+    audio_int16 = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
+    with wave.open(path, 'w') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sr)
+        wf.writeframes(audio_int16.tobytes())
+
+
+def load_audio(path):
+    """wav/mp3 파일 로드 → (float32 ndarray, sample_rate)."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == '.wav':
+        with wave.open(path, 'r') as wf:
+            sr = wf.getframerate()
+            n = wf.getnframes()
+            raw = wf.readframes(n)
+            ch = wf.getnchannels()
+        audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        if ch > 1:
+            audio = audio.reshape(-1, ch)[:, 0]
+        return audio, sr
+    else:
+        # mp3 등 → pydub로 변환
+        from pydub import AudioSegment
+        seg = AudioSegment.from_file(path)
+        seg = seg.set_channels(1)
+        sr = seg.frame_rate
+        raw = seg.raw_data
+        sw = seg.sample_width
+        if sw == 2:
+            audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        elif sw == 4:
+            audio = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
+        else:
+            audio = np.frombuffer(raw, dtype=np.uint8).astype(np.float32) / 128.0 - 1.0
+        return audio, sr
+
+
+def parse_vowel_from_filename(filename):
+    """파일명에서 정답 모음 추출.
+    1) 첫 글자가 단모음 자체면 (아, 어, ...) 그대로 반환
+    2) 첫 글자가 한글 음절이면 (가, 거, ...) 모음 추출
+    """
+    stem = os.path.splitext(filename)[0]
+    parts = stem.split('_')
+    first = parts[0]
+
+    # 순수 모음
+    if first in VOWELS:
+        return first
+
+    # 한글 음절에서 모음 추출
+    if len(first) == 1:
+        v = syllable_to_vowel(first)
+        if v is not None:
+            return v
+
+    return None
+
+
+def parse_metadata(filename):
+    """파일명에서 메타데이터 파싱.
+    예: 가_남_김동규_13_클린_플랫.mp3
+    → {syllable, gender, speaker, number, condition, pitch}
+    """
+    stem = os.path.splitext(filename)[0]
+    parts = stem.split('_')
+    meta = {}
+    if len(parts) >= 1:
+        meta['syllable'] = parts[0]
+    if len(parts) >= 2:
+        meta['gender'] = parts[1]
+    if len(parts) >= 3:
+        meta['speaker'] = parts[2]
+    if len(parts) >= 4:
+        meta['number'] = parts[3]
+    if len(parts) >= 5:
+        meta['condition'] = parts[4]
+    if len(parts) >= 6:
+        meta['pitch'] = parts[5]
+    return meta
+
+
+# ── 혼동 행렬 출력 ──
+
+def print_confusion_matrix(results, title=""):
+    """results: [(정답, 예측, 신뢰도), ...]"""
+    if not results:
+        print("결과 없음.")
+        return
+
+    correct = sum(1 for gt, pred, _ in results if gt == pred)
+    total = len(results)
+
+    if title:
+        print(f"\n{'='*60}")
+        print(f"  {title}")
+    print(f"{'='*60}")
+    print(f"전체 정확도: {correct}/{total} ({100*correct/total:.1f}%)")
+    print(f"{'='*60}\n")
+
+    # 혼동 행렬
+    matrix = {v: {v2: 0 for v2 in VOWELS} for v in VOWELS}
+    counts = {v: 0 for v in VOWELS}
+    for gt, pred, _ in results:
+        if gt in matrix and pred in VOWELS:
+            matrix[gt][pred] += 1
+            counts[gt] += 1
+
+    # 헤더
+    header = "정답\\예측"
+    print(f"  {header:>8s}", end="")
+    for v in VOWELS:
+        print(f"  {v:>4s}", end="")
+    print("   정확도")
+    print(f"  {'─'*8}", end="")
+    for _ in VOWELS:
+        print(f"  {'─'*4}", end="")
+    print(f"  {'─'*6}")
+
+    # 각 행
+    for v in VOWELS:
+        print(f"  {v:>8s}", end="")
+        row_total = counts[v]
+        for v2 in VOWELS:
+            cnt = matrix[v][v2]
+            if cnt == 0:
+                print(f"  {'·':>4s}", end="")
+            elif v == v2:
+                print(f"  \033[92m{cnt:>4d}\033[0m", end="")  # 초록
+            else:
+                print(f"  \033[91m{cnt:>4d}\033[0m", end="")  # 빨강
+
+        if row_total > 0:
+            acc = matrix[v][v] / row_total * 100
+            print(f"  {acc:5.1f}%")
+        else:
+            print(f"    -")
+
+    # 모음별 상세
+    print(f"\n모음별 상세:")
+    for v in VOWELS:
+        if counts[v] == 0:
+            continue
+        acc = matrix[v][v] / counts[v] * 100
+        errors = [(v2, matrix[v][v2]) for v2 in VOWELS if v2 != v and matrix[v][v2] > 0]
+        err_str = ", ".join(f"{v2}({c})" for v2, c in errors) if errors else "없음"
+        print(f"  {v}: {acc:.0f}% ({matrix[v][v]}/{counts[v]})  오인: {err_str}")
+
+    # 평균 신뢰도
+    avg_conf_correct = np.mean([c for gt, pred, c in results if gt == pred]) if correct > 0 else 0
+    avg_conf_wrong = np.mean([c for gt, pred, c in results if gt != pred]) if correct < total else 0
+    print(f"\n평균 신뢰도:")
+    print(f"  정답: {avg_conf_correct:.3f}")
+    if correct < total:
+        print(f"  오답: {avg_conf_wrong:.3f}")
+
+
+# ── 모드 1: 녹음 ──
+
+def cmd_record(args):
+    import sounddevice as sd
+
+    out_dir = args.out_dir
+    os.makedirs(out_dir, exist_ok=True)
+    n_repeats = args.repeats
+    duration = args.duration
+
+    print(f"녹음 설정: 모음 {len(VOWELS)}개 × {n_repeats}회 × {duration}초")
+    print(f"저장 위치: {out_dir}/")
+    print(f"총 {len(VOWELS) * n_repeats}개 샘플 녹음 예정\n")
+    input("준비되면 Enter...")
+
+    for rep in range(1, n_repeats + 1):
+        print(f"\n── {rep}/{n_repeats} 라운드 ──")
+        for vowel in VOWELS:
+            filename = f"{vowel}_{rep}.wav"
+            filepath = os.path.join(out_dir, filename)
+
+            print(f"\n  [{vowel}] 발음 준비... ", end="", flush=True)
+            time.sleep(1.0)
+            print(f"녹음 시작! ({duration}초)", flush=True)
+
+            audio = sd.rec(int(SR * duration), samplerate=SR,
+                           channels=1, dtype='float32')
+            for t in range(duration, 0, -1):
+                print(f"    {t}...", flush=True)
+                time.sleep(1.0)
+            sd.wait()
+
+            audio = audio.flatten()
+            save_wav(filepath, audio, SR)
+            print(f"    저장: {filename} (rms={np.sqrt(np.mean(audio**2)):.4f})")
+
+    print(f"\n녹음 완료! {out_dir}/ 에 파일 저장됨.")
+    print(f"평가: python -m vowel_recognition.method_5_phoneme.test_evaluate eval --audio_dir {out_dir}")
+
+
+# ── 모드 2: 파일 평가 ──
+
+def cmd_eval(args):
+    audio_dir = args.audio_dir
+    if not os.path.isdir(audio_dir):
+        print(f"오류: 디렉토리를 찾을 수 없습니다: {audio_dir}")
+        sys.exit(1)
+
+    # 오디오 파일 수집 (wav, mp3)
+    audio_exts = {'.wav', '.mp3', '.flac', '.ogg', '.m4a'}
+    all_files = sorted([f for f in os.listdir(audio_dir)
+                        if os.path.splitext(f)[1].lower() in audio_exts])
+    if not all_files:
+        print(f"오류: {audio_dir}/ 에 오디오 파일이 없습니다.")
+        sys.exit(1)
+
+    # 정답 라벨 파싱 + 필터링
+    samples = []
+    skipped = []
+    for f in all_files:
+        vowel = parse_vowel_from_filename(f)
+        if vowel is None:
+            skipped.append(f)
+            continue
+
+        # 필터 적용
+        meta = parse_metadata(f)
+        if args.speaker and meta.get('speaker') != args.speaker:
+            continue
+        if args.gender and meta.get('gender') != args.gender:
+            continue
+        if args.condition and meta.get('condition') != args.condition:
+            continue
+        if args.syllable and meta.get('syllable') != args.syllable:
+            continue
+
+        samples.append((f, vowel, meta))
+
+    if skipped:
+        print(f"경고: 모음을 파싱할 수 없는 파일 {len(skipped)}개 건너뜀")
+        if len(skipped) <= 5:
+            for f in skipped:
+                print(f"  {f}")
+        print()
+
+    if not samples:
+        print("평가할 샘플이 없습니다. (필터 조건 확인)")
+        sys.exit(1)
+
+    # 통계 요약
+    speakers = set(m.get('speaker', '?') for _, _, m in samples)
+    conditions = set(m.get('condition', '?') for _, _, m in samples)
+    vowel_counts = {}
+    for _, v, _ in samples:
+        vowel_counts[v] = vowel_counts.get(v, 0) + 1
+
+    print(f"평가 대상: {len(samples)}개 파일")
+    print(f"  화자: {', '.join(sorted(speakers))}")
+    print(f"  조건: {', '.join(sorted(conditions))}")
+    print(f"  모음별: {', '.join(f'{v}({c})' for v, c in sorted(vowel_counts.items()))}")
+    print()
+
+    detector = load_model()
+    results = []
+    # 화자별/조건별 결과도 따로 저장
+    results_by_speaker = {}
+    results_by_condition = {}
+
+    for i, (filename, gt_vowel, meta) in enumerate(samples):
+        filepath = os.path.join(audio_dir, filename)
+        audio, sr = load_audio(filepath)
+
+        t0 = time.perf_counter()
+        pred, conf, probs = predict_vowel(detector, audio, sr)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        ok = "O" if pred == gt_vowel else "X"
+        print(f"  [{i+1:3d}/{len(samples)}] {filename:45s}  "
+              f"정답={gt_vowel}  예측={pred}  신뢰도={conf:.3f}  "
+              f"{elapsed_ms:.0f}ms  {ok}")
+
+        if pred is not None:
+            entry = (gt_vowel, pred, conf)
+            results.append(entry)
+
+            spk = meta.get('speaker', '?')
+            results_by_speaker.setdefault(spk, []).append(entry)
+
+            cond = meta.get('condition', '?')
+            results_by_condition.setdefault(cond, []).append(entry)
+
+    # 전체 혼동 행렬
+    print_confusion_matrix(results, "전체 결과")
+
+    # 화자별 정확도 요약
+    if len(results_by_speaker) > 1:
+        print(f"\n{'─'*60}")
+        print("화자별 정확도:")
+        for spk in sorted(results_by_speaker):
+            r = results_by_speaker[spk]
+            acc = sum(1 for gt, pred, _ in r if gt == pred) / len(r) * 100
+            print(f"  {spk:12s}: {acc:5.1f}% ({len(r)}개)")
+
+    # 조건별 정확도 요약
+    if len(results_by_condition) > 1:
+        print(f"\n{'─'*60}")
+        print("조건별 정확도:")
+        for cond in sorted(results_by_condition):
+            r = results_by_condition[cond]
+            acc = sum(1 for gt, pred, _ in r if gt == pred) / len(r) * 100
+            print(f"  {cond:12s}: {acc:5.1f}% ({len(r)}개)")
+
+    # 상세 분석 출력 (화자별 혼동 행렬)
+    if args.detail and len(results_by_speaker) > 1:
+        for spk in sorted(results_by_speaker):
+            print_confusion_matrix(results_by_speaker[spk], f"화자: {spk}")
+
+
+# ── 모드 3: 실시간 평가 ──
+
+def cmd_live(args):
+    import sounddevice as sd
+
+    duration = args.duration
+    n_repeats = args.repeats
+
+    detector = load_model()
+    results = []
+
+    print(f"실시간 평가: 모음 {len(VOWELS)}개 × {n_repeats}회 × {duration}초")
+    print("안내에 따라 해당 모음을 발음하세요.\n")
+    input("준비되면 Enter...")
+
+    for rep in range(1, n_repeats + 1):
+        print(f"\n── {rep}/{n_repeats} 라운드 ──")
+        for vowel in VOWELS:
+            print(f"\n  [{vowel}] 발음 준비... ", end="", flush=True)
+            time.sleep(1.0)
+            print(f"녹음! ({duration}초)", flush=True)
+
+            audio = sd.rec(int(SR * duration), samplerate=SR,
+                           channels=1, dtype='float32')
+            for t in range(duration, 0, -1):
+                print(f"    {t}...", flush=True)
+                time.sleep(1.0)
+            sd.wait()
+            audio = audio.flatten()
+
+            t0 = time.perf_counter()
+            pred, conf, probs = predict_vowel(detector, audio, SR)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+
+            ok = "O" if pred == vowel else "X"
+            sorted_p = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:3]
+            top3 = "  ".join(f"{v}:{p:.3f}" for v, p in sorted_p)
+            print(f"    → 예측={pred}  신뢰도={conf:.3f}  {elapsed_ms:.0f}ms  {ok}")
+            print(f"      상위3: {top3}")
+
+            if pred is not None:
+                results.append((vowel, pred, conf))
+
+    print_confusion_matrix(results)
+
+
+# ── main ──
+
+def main():
+    parser = argparse.ArgumentParser(description="Method 5 (Phoneme) 정량 평가")
+    sub = parser.add_subparsers(dest='cmd')
+
+    # record
+    p_rec = sub.add_parser('record', help='모음 녹음 → wav 저장')
+    p_rec.add_argument('--out_dir', default='eval_samples', help='저장 디렉토리')
+    p_rec.add_argument('--repeats', type=int, default=3, help='반복 횟수 (기본 3)')
+    p_rec.add_argument('--duration', type=int, default=2, help='녹음 시간 초 (기본 2)')
+
+    # eval
+    p_eval = sub.add_parser('eval', help='오디오 파일로 평가')
+    p_eval.add_argument('--audio_dir', required=True, help='오디오 파일 디렉토리')
+    p_eval.add_argument('--speaker', default=None, help='특정 화자만 (예: 김동규)')
+    p_eval.add_argument('--gender', default=None, help='특정 성별만 (남/여)')
+    p_eval.add_argument('--condition', default=None, help='특정 조건만 (클린/리버브/소음)')
+    p_eval.add_argument('--syllable', default=None, help='특정 음절만 (예: 가)')
+    p_eval.add_argument('--detail', action='store_true', help='화자별 혼동 행렬 출력')
+
+    # live
+    p_live = sub.add_parser('live', help='실시간 마이크 평가')
+    p_live.add_argument('--repeats', type=int, default=3, help='반복 횟수 (기본 3)')
+    p_live.add_argument('--duration', type=int, default=2, help='녹음 시간 초 (기본 2)')
+
+    args = parser.parse_args()
+
+    if args.cmd == 'record':
+        cmd_record(args)
+    elif args.cmd == 'eval':
+        cmd_eval(args)
+    elif args.cmd == 'live':
+        cmd_live(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == '__main__':
+    main()

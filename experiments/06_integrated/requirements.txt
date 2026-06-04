@@ -1,0 +1,23 @@
+# === 공통 (모든 모듈) ===
+numpy
+PySide6
+scipy
+
+# === audio_capture ===
+sounddevice
+
+# === method_3: MFCC+CMVN+SVM (추천) ===
+scikit-learn
+silero-vad
+torch
+# speechpy  # 선택: MFCC+CMVN 올인원
+
+# === method_4: wav2vec2 ===
+transformers
+huggingface_hub
+
+# === method_5: phoneme (wav2vec2-lv-60-espeak) ===
+# (transformers, huggingface_hub 위에서 이미 포함)
+
+# === method_2: formant (테스트용) ===
+# parselmouth  # 선택: Praat 엔진

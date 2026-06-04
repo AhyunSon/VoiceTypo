@@ -1,0 +1,56 @@
+text_effects - 시각 효과
+=========================
+
+역할:
+  피치/볼륨/비브라토 데이터를 시각적 파라미터로 변환
+  (실제 렌더링은 ui/에서 수행, 여기는 계산만)
+
+구현할 파일:
+  effects.py
+
+라이브러리:
+  없음 (순수 Python 계산)
+
+변환 규칙 (HTML 원본 기준):
+
+  1. 피치 -> 스케일 변형
+     - pitchRatio: -1 (최저) ~ 0 (기준) ~ +1 (최고)
+     - scaleX = 1 - pitchRatio * 0.65   (높은 음 -> 가로 줄어듦)
+     - scaleY = 1 + pitchRatio * 0.9    (높은 음 -> 세로 늘어남)
+     - 면적 보정: normFactor = 1 / sqrt(scaleX * scaleY)
+     - 스무딩: SCALE_SMOOTHING = 0.08
+
+  2. 볼륨 -> 전체 크기
+     - volumeScale = 0.2 + rms^0.6 * 8  (범위: 0.2 ~ 3.5)
+     - 스무딩: VOLUME_SMOOTHING = 0.18
+
+  3. 피치 -> 색상
+     - 높은 음: 흰색 -> 빨강/주황 그라데이션
+     - 낮은 음: 흰색 -> 보라/파랑 그라데이션 + 어두워짐 (50%까지)
+     - 스무딩: COLOR_SMOOTHING = 0.08
+
+  4. 비브라토 -> 떨림 효과
+     - rate > 1.5Hz && extent > threshold -> 떨림 활성화
+     - HTML에서는 SVG feTurbulence 필터 사용
+     - Python에서는 QPainter로 노이즈 기반 변위 구현
+       또는 SDF에 노이즈 오프셋 적용
+     - 스무딩: VIBRATO_SMOOTHING = 0.15
+
+  5. 절대음/상대음 모드
+     - 절대음: 220Hz 기준으로 pitchRatio 계산
+     - 상대음: 캘리브레이션된 baselinePitch 기준
+     - PITCH_UP_RANGE = 18 반음, PITCH_DOWN_RANGE = 6 반음
+
+출력 (매 프레임):
+  EffectParams:
+    scaleX, scaleY    : float (글자 변형)
+    volumeScale       : float (전체 크기)
+    color_top, color_bottom : RGB (그라데이션)
+    glow_color        : RGB (글로우)
+    vibrato_displacement : float (떨림 강도)
+    vibrato_seed      : int (노이즈 시드)
+
+HTML 원본 대응:
+  updateVisual()    -> effects.py (계산 부분)
+  applyPitchColor() -> effects.py (색상 계산)
+  animateVibrato()  -> effects.py (떨림 파라미터 계산)

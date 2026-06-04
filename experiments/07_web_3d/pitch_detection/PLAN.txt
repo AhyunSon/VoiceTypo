@@ -1,0 +1,44 @@
+pitch_detection - 피치 감지
+=============================
+
+역할:
+  오디오 프레임에서 기본 주파수(F0)를 실시간 추출
+  + 비브라토 감지 (주파수 진동 패턴 분석)
+
+구현할 파일:
+  yin.py        - YIN 알고리즘 (피치 감지)
+  vibrato.py    - 비브라토 분석 (피치 히스토리에서 진동 추출)
+
+라이브러리:
+  numpy만 사용 (추가 의존성 없음)
+
+선택 이유:
+  - HTML 원본과 동일한 YIN 알고리즘
+  - 실시간 프레임 단위 즉시 응답 필요 (librosa.pyin은 버퍼링 때문에 부적합)
+  - crepe(딥러닝)는 GPU 필요하고 지연 큼
+  - numpy 벡터 연산으로 JS보다 오히려 빠름
+
+YIN 알고리즘 요약:
+  1. 자기상관 차분 함수 계산
+  2. 누적 평균 정규화 (CMNDF)
+  3. 임계값(0.1) 이하 첫 번째 최솟값 찾기
+  4. 포물선 보간으로 정밀 주파수 계산
+  입력: float32 배열 (2048~4096 샘플)
+  출력: 주파수(Hz), RMS(볼륨)
+
+비브라토 분석:
+  - 피치 히스토리 (최근 30프레임) 유지
+  - 평균 대비 편차 계산
+  - 영점 교차 횟수 -> 진동 주파수(rate)
+  - max-min 편차 -> 진폭(extent)
+  - HTML의 analyzeVibrato() 그대로 포팅
+
+핵심 파라미터:
+  VOICE_MIN_FREQ = 80 Hz
+  VOICE_MAX_FREQ = 1100 Hz
+  SILENCE_THRESHOLD = 0.001 (RMS)
+  PITCH_HISTORY_SIZE = 30 프레임
+
+HTML 원본 대응:
+  detectPitch()    -> yin.py
+  analyzeVibrato() -> vibrato.py

@@ -1,0 +1,8 @@
+Speaker ID: F_20s_gyeongsang
+Gender: Female
+Age: 20s
+Dialect: Gyeongsang (경상도)
+Recording date: 2026-03-10
+Source session: session_20260310_151524
+Files: 오_01~05.wav, 우_01~05.wav (총 10개)
+Note: 오/우만 녹음. 경상도 방언 화자로, 서울말 화자와 오/우 발화 특성이 다를 수 있음.

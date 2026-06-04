@@ -1,0 +1,51 @@
+ui - PySide6 메인 윈도우
+========================
+
+역할:
+  모든 모듈을 통합하여 하나의 PySide6 앱으로 동작
+  HTML의 전체 UI를 대체
+
+구현할 파일:
+  main_window.py
+
+라이브러리:
+  PySide6 (이미 text_morphing에서 사용 중)
+
+UI 구성 (HTML 대응):
+
+  1. 메인 화면
+     - 검정 배경, 중앙에 모음 글자 크게 표시
+     - 글자에 text_effects 적용 (스케일, 색상, 떨림)
+     - 모음 변경 시 text_morphing의 SDF 모핑 트리거
+
+  2. 컨트롤 바 (하단)
+     - 시작/정지 버튼
+     - 절대음/상대음 모드 토글
+     - 디버그 토글
+
+  3. 캘리브레이션 UI
+     - 기준음 설정 (상대음 모드): 3초 카운트다운
+     - 모음 캘리브레이션: 각 모음 2.5초씩 순회
+
+  4. 디버그 패널
+     - 스펙트럼 캔버스 (QPainter로 그리기)
+     - VAD 상태, 주파수, 볼륨, 모음, 신뢰도, 비브라토, 기준음
+     - 캘리브레이션 결과 표시 (모음별)
+
+스레드 구조:
+  - 메인 스레드: Qt 이벤트 루프 + 렌더링
+  - 오디오 스레드: sounddevice 콜백 (자동 관리)
+  - 분석: 오디오 콜백 내에서 처리 후 Qt Signal로 UI에 전달
+  - QTimer (60fps): 매 프레임 화면 갱신
+
+통합 방법:
+  audio_capture -> (콜백) -> pitch_detection + vowel_recognition
+                          -> (Qt Signal) -> text_effects 계산
+                                         -> paintEvent에서 렌더링
+                                         -> 모음 변경 시 text_morphing 호출
+
+text_morphing 통합:
+  - 현재: 키보드 1-7로 모음 선택 -> 모핑
+  - 통합 후: vowel_recognition 결과로 자동 트리거
+  - GlyphData, _blend_glyphs, _sdf_to_qimage 등을 import해서 사용
+  - SDF 렌더링 결과(QImage)에 text_effects 적용 후 화면에 그리기

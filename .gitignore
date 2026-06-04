@@ -34,3 +34,8 @@ external_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# 웹 프론트엔드 (07_web_3d) — npm/vite 산출물
+node_modules/
+dist/
+.vite/
