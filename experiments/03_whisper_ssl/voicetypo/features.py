@@ -11,8 +11,21 @@ class WhisperFeatureExtractor:
     """Wraps HF Whisper-base. We use ONLY the encoder, so the decoder is dropped."""
 
     def __init__(self, model_id: str = "openai/whisper-base", device: str | None = None):
+        import os
         from transformers import WhisperFeatureExtractor as HFFeat, WhisperModel
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # Device priority: explicit arg > VT_DEVICE env > CUDA > Apple GPU (MPS) > CPU.
+        # MPS runs the same fp32 encoder math on the Apple GPU, ~2x faster than CPU
+        # for short real-time segments with no accuracy change.
+        if device is None:
+            device = os.environ.get("VT_DEVICE")
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        self.device = device
         self.feat = HFFeat.from_pretrained(model_id)
         self.model = WhisperModel.from_pretrained(model_id).to(self.device).eval()
         # encoder output frames are at 50 Hz (Whisper conv stride)

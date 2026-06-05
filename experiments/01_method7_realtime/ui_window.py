@@ -792,10 +792,19 @@ class RealtimePraatWindow(QMainWindow):
             vowel_raw, v_conf = "?", 0.0
 
         # ── EMA + 히스테리시스로 안정적인 모음 표시 ──────────────────
+        # 상단 큰 글자는 우측 '모음공간(F1/F2 포먼트)' 표시와 항상 일치해야 하므로,
+        # wav2vec 투표(vowel_raw) 대신 포먼트 분류(classify_vowel)를 EMA 입력으로 사용.
+        # → 점이 들어간 모음 영역 = 상단 글자.
+        disp_f3 = result.get("raw_f3")
+        if iv and f1 is not None and f2 is not None:
+            disp_vowel, disp_conf = classify_vowel(f1, f2, self.gender, f3=disp_f3)
+        else:
+            disp_vowel, disp_conf = "?", 0.0
+
         n_v = len(self._VOWEL_LIST)
-        if iv and vowel_raw != "?" and v_conf > 0.15:
-            prob = np.full(n_v, (1.0 - v_conf) / max(n_v - 1, 1))
-            prob[self._VOWEL_IDX[vowel_raw]] = v_conf
+        if iv and disp_vowel != "?" and disp_conf > 0.15:
+            prob = np.full(n_v, (1.0 - disp_conf) / max(n_v - 1, 1))
+            prob[self._VOWEL_IDX[disp_vowel]] = disp_conf
             self._vowel_ema = ((1 - self._EMA_ALPHA) * self._vowel_ema
                                + self._EMA_ALPHA * prob)
         else:

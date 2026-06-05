@@ -57,7 +57,7 @@ SANITY_REFS = {
         "어": (570,  95,  994, 146),
     },
 }
-SANITY_TOL_SIGMA = 3.0
+SANITY_TOL_SIGMA = 5.0   # 3.0→5.0: 마이크/방 색채로 포먼트가 살짝 틀어져도 통과
 
 
 def _is_sane(vowel: str, gender: str, f1: float, f2: float) -> bool:
@@ -69,12 +69,17 @@ def _is_sane(vowel: str, gender: str, f1: float, f2: float) -> bool:
 class CalibrationDialog(QDialog):
     """7 모음 × 2 takes 자동 캘리브레이션 다이얼로그."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, device=None):
         super().__init__(parent)
         self.setWindowTitle("캘리브레이션")
         self.setModal(True)
         self.setMinimumSize(520, 460)
         self.setStyleSheet("background:#0d0d1a; color:#FFFFFF;")
+
+        # 녹음에 쓸 입력 장치 (UI에서 고른 마이크; None이면 시스템 기본)
+        self.device = device if device is not None else sd.default.device[0]
+        self._win = parent          # 메인 윈도우 (레벨 미터는 메인 오디오 버퍼를 읽음)
+        self._busy = False
 
         self.gender = "female"
         self.engine = FormantEngine()
@@ -93,6 +98,36 @@ class CalibrationDialog(QDialog):
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_title.setFont(QFont("Malgun Gothic", 16, QFont.Weight.Bold))
         layout.addWidget(self.lbl_title)
+
+        # ── 마이크 선택 + 실시간 레벨 미터 ──
+        from audio_stream import AudioStream
+        mrow = QHBoxLayout()
+        mrow.addWidget(QLabel("마이크:"))
+        self.cmb_mic = QComboBox()
+        self.cmb_mic.setFixedHeight(32)
+        self._mic_ids = []
+        sel = 0
+        for i, (dev_id, name) in enumerate(AudioStream.get_input_devices()):
+            self.cmb_mic.addItem(f"[{dev_id}] {name}")
+            self._mic_ids.append(dev_id)
+            if dev_id == self.device:
+                sel = i
+        if self._mic_ids:
+            self.cmb_mic.setCurrentIndex(sel)
+            self.device = self._mic_ids[sel]
+        self.cmb_mic.currentIndexChanged.connect(self._on_mic_changed)
+        mrow.addWidget(self.cmb_mic)
+        layout.addLayout(mrow)
+
+        self.lbl_level = QLabel("레벨: ────────────────")
+        self.lbl_level.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_level.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
+        self.lbl_level.setStyleSheet("color:#FFCC44;")
+        layout.addWidget(self.lbl_level)
+        self.lbl_level_hint = QLabel("말했을 때 막대가 차오르는 마이크를 고르세요")
+        self.lbl_level_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_level_hint.setStyleSheet("color:#888; font-size:9pt;")
+        layout.addWidget(self.lbl_level_hint)
 
         # 성별 선택 + 시작
         row = QHBoxLayout()
@@ -145,6 +180,47 @@ class CalibrationDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
         layout.addWidget(self.btn_cancel)
 
+        # 레벨 미터 갱신 타이머 (메인 윈도우의 기존 오디오 버퍼를 읽음 → 추가 스트림 없음)
+        self._level_timer = QTimer(self)
+        self._level_timer.timeout.connect(self._update_level)
+        self._level_timer.start(80)
+
+    # ── 마이크 선택 / 레벨 미터 ──────────────────────────────
+    def _on_mic_changed(self, idx: int) -> None:
+        if not (0 <= idx < len(self._mic_ids)):
+            return
+        dev_id = self._mic_ids[idx]
+        self.device = dev_id
+        # 메인 윈도우 스트림도 같은 장치로 전환 (레벨 미터가 그 버퍼를 읽으므로)
+        win = self._win
+        if (win is not None and hasattr(win, "combo_device")
+                and dev_id in getattr(win, "_device_ids", [])):
+            win.combo_device.setCurrentIndex(win._device_ids.index(dev_id))
+
+    def _update_level(self) -> None:
+        if self._busy:
+            return
+        rms = 0.0
+        win = self._win
+        try:
+            if win is not None and hasattr(win, "audio"):
+                c = win.audio.get_chunk(int(0.05 * SAMPLE_RATE))
+                if c is not None:
+                    rms = float(np.sqrt(np.mean(c ** 2)))
+        except Exception:
+            pass
+        bars = int(min(rms * 600, 18))
+        self.lbl_level.setText("레벨: " + "█" * bars + "░" * (18 - bars) + f"  {rms:.4f}")
+        self.lbl_level.setStyleSheet(
+            "color:%s;" % ("#44FF88" if rms > 0.012 else "#FFCC44"))
+
+    def done(self, r: int) -> None:
+        try:
+            self._level_timer.stop()
+        except Exception:
+            pass
+        super().done(r)
+
     # ── flow ──────────────────────────────────────────────
 
     def _start(self) -> None:
@@ -184,11 +260,13 @@ class CalibrationDialog(QDialog):
             QTimer.singleShot(50, self._record)
 
     def _record(self) -> None:
+        self._busy = True
         audio = sd.rec(int(RECORD_SEC * SAMPLE_RATE),
                        samplerate=SAMPLE_RATE,
-                       channels=1, dtype="float32")
+                       channels=1, dtype="float32", device=self.device)
         sd.wait()
         audio = audio[:, 0]
+        self._busy = False
         self._process(audio)
 
     def _process(self, audio: np.ndarray) -> None:
@@ -210,7 +288,9 @@ class CalibrationDialog(QDialog):
             return
 
         if not _is_sane(v, self.gender, f1, f2):
-            self._fail(f"비정상 F1={f1:.0f} F2={f2:.0f}")
+            # 추출은 됐고 음량도 충분하면, 재시도 소진 시 그래도 채택 (캘리브레이션 완수)
+            ok = (f1, f2, f3) if rms > 0.015 else None
+            self._fail(f"비정상 F1={f1:.0f} F2={f2:.0f}", extract=ok)
             return
 
         # 성공
@@ -224,10 +304,17 @@ class CalibrationDialog(QDialog):
         self.retry_left = SANITY_RETRY
         QTimer.singleShot(800, self._next_vowel)
 
-    def _fail(self, reason: str) -> None:
+    def _fail(self, reason: str, extract=None) -> None:
+        v = VOWELS[self.v_idx]
+        print(f"[cal] '{v}' take 실패: {reason}", flush=True)   # 터미널에 사유 노출
         self.retry_left -= 1
         if self.retry_left <= 0:
-            self.lbl_result.setText(f"✗ {reason} — 이 모음 포기")
+            # 재시도 소진 — 포먼트가 추출됐다면(extract) 그 값이라도 채택해 캘리브레이션 완수
+            if extract is not None:
+                self.takes[v].append(extract)
+                self.lbl_result.setText(f"△ {reason} — 그래도 사용")
+            else:
+                self.lbl_result.setText(f"✗ {reason} — 이 모음 건너뜀")
             self.t_idx = TAKES_PER_VOWEL  # 다음 모음으로
             self.retry_left = SANITY_RETRY
         else:
@@ -237,7 +324,7 @@ class CalibrationDialog(QDialog):
     def _finish(self) -> None:
         refs = {}
         for v, takes in self.takes.items():
-            if len(takes) < 2:
+            if len(takes) < 1:          # 1 take라도 있으면 사용 (2→1)
                 continue
             arr = np.array(takes)
             f1, f2, f3 = arr[:, 0].mean(), arr[:, 1].mean(), arr[:, 2].mean()
@@ -248,7 +335,7 @@ class CalibrationDialog(QDialog):
                        float(f2), float(sd2),
                        float(f3), float(sd3))
 
-        if len(refs) < 5:
+        if len(refs) < 4:
             self.lbl_status.setText(
                 f"⚠ {len(refs)}/7 만 cal — 학계 _REFS 사용"
             )

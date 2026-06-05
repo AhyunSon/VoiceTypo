@@ -517,10 +517,10 @@ SCENE_CLASSES = [Scene01, Scene02, Scene03, Scene04, Scene05, Scene06]
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIN_W, WIN_H))
-    pygame.display.set_caption("VoiceTypo — 시각 스케치 허브 (1~5 전환)")
+    pygame.display.set_caption("VoiceTypo — 시각 스케치 허브 (상단 버튼 / 숫자키 1~6 전환)")
     clock = pygame.time.Clock()
     bar_font = pygame.font.SysFont(KFONT, 16, bold=True)
-    hint_font = pygame.font.SysFont(KFONT, 13)
+    hint_font = pygame.font.SysFont(KFONT, 14, bold=True)
 
     stage = screen.subsurface(STAGE)
     sw, sh = stage.get_size()
@@ -567,18 +567,42 @@ def main():
         # 상단 버튼 바
         pygame.draw.rect(screen, (20, 22, 30), (0, 0, WIN_W, BAR_H))
         pygame.draw.line(screen, (50, 55, 70), (0, BAR_H - 1), (WIN_W, BAR_H - 1))
+        mx, my = pygame.mouse.get_pos()
         for i, (r, sc) in enumerate(zip(btn_rects, scenes)):
             on = (i == active)
-            fill = (70, 120, 200) if on else (38, 42, 54)
+            hover = r.collidepoint(mx, my)
+            if on:
+                fill, bord, fg, lw = (70, 120, 200), (150, 190, 245), (255, 255, 255), 2
+            elif hover:
+                fill, bord, fg, lw = (58, 64, 82), (120, 165, 225), (235, 240, 250), 2
+            else:
+                fill, bord, fg, lw = (38, 42, 54), (70, 76, 92), (185, 192, 208), 1
             pygame.draw.rect(screen, fill, r, border_radius=8)
-            pygame.draw.rect(screen, (120, 160, 220) if on else (70, 76, 92), r, 1, border_radius=8)
-            txt = bar_font.render(sc.name, True, (255, 255, 255) if on else (180, 188, 205))
+            pygame.draw.rect(screen, bord, r, lw, border_radius=8)
+            txt = bar_font.render(sc.name, True, fg)
             screen.blit(txt, txt.get_rect(center=r.center))
 
         hint = hint_font.render(
-            "버튼 / 숫자키 1~6 전환  ·  C 비움(5·6)  ·  ESC 종료",
-            True, (150, 158, 178))
-        screen.blit(hint, (x0 + n * (bw + gap) + 14, y0 + 12))
+            "버튼 / 숫자키 1~6 전환  ·  C 비움  ·  ESC 종료", True, (165, 173, 193))
+        screen.blit(hint, (x0 + n * (bw + gap) + 14, y0 + 14))
+
+        # 시작 직후 큰 안내 배너 — 상단 버튼을 가리키며 (8초 후 서서히 사라짐)
+        elapsed = pygame.time.get_ticks() / 1000.0
+        if elapsed < 8.0:
+            a = 255 if elapsed < 6.0 else max(0, int(255 * (8.0 - elapsed) / 2.0))
+            pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.005)
+            big = pygame.font.SysFont(KFONT, 28, bold=True)
+            msg = big.render("↑  위쪽 버튼을 클릭해서 작품을 전환하세요  ·  숫자키 1~6  ↑",
+                             True, (255, int(200 + 55 * pulse), 70))
+            mw, mh = msg.get_size()
+            pad = 18
+            ban = pygame.Surface((mw + pad * 2, mh + pad), pygame.SRCALPHA)
+            ban.fill((10, 12, 20, min(210, a)))
+            pygame.draw.rect(ban, (255, 210, 70, min(255, a)), ban.get_rect(), 2, border_radius=10)
+            bx = (WIN_W - mw - pad * 2) // 2
+            screen.blit(ban, (bx, BAR_H + 14))
+            msg.set_alpha(a)
+            screen.blit(msg, (bx + pad, BAR_H + 14 + pad // 2))
 
         pygame.display.flip()
         clock.tick(scenes[active].fps)

@@ -177,7 +177,7 @@ class RealtimePraatWindow(QMainWindow):
         if (Path(__file__).resolve().parent / "user_refs.pkl").exists():
             return
         from cal_dialog import CalibrationDialog
-        dlg = CalibrationDialog(self)
+        dlg = CalibrationDialog(self, device=getattr(self, "_cur_device", None))
         if dlg.exec() and dlg.user_refs is not None:
             set_user_refs(dlg.user_refs)
             print(f"  [cal] 새 cal 완료 — {len(dlg.user_refs)}/7 모음")
@@ -258,6 +258,7 @@ class RealtimePraatWindow(QMainWindow):
             if dev_id == default_device:
                 default_idx = i
         self.combo_device.setCurrentIndex(default_idx)
+        self._cur_device = self._device_ids[default_idx] if self._device_ids else None
         self.combo_device.currentIndexChanged.connect(self._on_device_changed)
         bar.addWidget(self.combo_device)
 
@@ -274,6 +275,7 @@ class RealtimePraatWindow(QMainWindow):
     def _on_device_changed(self, idx):
         """장치 변경 시 오디오 스트림 재시작 + 상태 초기화"""
         dev_id = self._device_ids[idx]
+        self._cur_device = dev_id
         self._timer.stop()
         self._level_timer.stop()
         self.running = False

@@ -1,109 +1,132 @@
-# 🎤 VoiceTypo 데모 가이드 (주간 회의용)
+# 🎤 VoiceTypo 데모 가이드 (팀 공유용)
 
-이 폴더(`voicetypo_demo`) **하나만** 노트북에 옮기면 7가지 실험을 실행할 수 있습니다.
-20GB 학습 데이터는 빠져 있어요 — **라이브 데모엔 모델 파일만 필요**하고, 그건 다 들어 있습니다.
+이 `experiments` 폴더 하나에 **01~07 실험이 전부** 들어 있고, **`./run.sh <번호>`** 한 줄로 실행됩니다.
+20GB 학습 데이터는 빠져 있지만 **라이브 데모에 필요한 모델·정규화 파일은 다 포함**돼 있어요.
 
-> ⚠️ **딱 하나, 폴더로 못 옮기는 것:** 파이썬 패키지(torch 등). venv는 컴퓨터마다 달라 복사가 안 돼요.
-> 그래서 노트북에서 **한 번만 `pip install`** 하면 됩니다 (아래 0번). 그 뒤론 명령 한 줄로 실행돼요.
+> ⭐ **이번 회의 메인 데모는 `6번`(통합본)** 입니다. 나머지는 그 6번이 나오기까지의 과정·곁가지 실험이에요.
 
----
+## ▶ 추천 시연 순서
 
-## ⚡ 30초 요약
+**먼저 `6번` → `7번`, 그다음 `1~5번`** 순으로 보세요.
 
-| # | 실험 | 실행 (폴더 안에서) | 라이브 난이도 | 인터넷 |
-| --- | --- | --- | --- | --- |
-| 01 | method7 실시간 (구버전) | `python main.py` | △ 무거움 | 첫 실행 시 ⭕ |
-| **02** | **포먼트 (메인)** | `python main.py` | ✅ 쉽고 안정 | ❌ |
-| 03 | Whisper SSL | `python scripts/03_run_realtime.py` | ⚠️ 가능 | 첫 실행 시 ⭕(290MB) |
-| 04 | 경량 ML | `python scripts/04_live_test_v3.py` | ⚠️ 불안정 | v4만 ⭕ |
-| **05** | **시각화 (볼거리)** | `python sketch_02_vowel_letterform.py` | ✅ 쉽고 화려 | ❌ |
-| 06 | 통합본 (아현) | `python main_integrated.py` | △ 무거움 | ⭕ |
-| **07** | **웹 3D 모음공간 (신규)** | 터미널2개: `python server.py` + `npm run dev` | ✅ 화려·안정 | ❌(설치 후) |
-
-> **회의에서 라이브로 "와" 하는 건 02 + 05 + 07.** 03·04는 마이크가 흔들리면 **녹음된 wav로 대체**(각 폴더 `livetest/`).
-> 07은 브라우저에서 F1/F2/F3 3D 공간에 모음 포인트 클라우드를 실시간으로 그려 시각적으로 가장 인상적.
-
----
-
-## 0. 준비 — 노트북에서 한 번만
-
-1. **Python 3.10+ 설치** — `brew install python` 또는 python.org. 터미널에서 `python3 --version` 확인.
-2. **인터넷 연결된 곳에서 미리** 아래를 실행 — 회의장 와이파이 믿지 말 것.
-3. 실험마다 가상환경을 따로 만드는 걸 권장 (02·05는 같이 써도 됨).
+1. **`6번` (메인)** — 음성 → 모음 인식 → 글자 모핑·효과까지 합친 **최종 통합본**
+2. **`7번`** — 웹 3D 모음공간 (브라우저에서 모음을 3D로 시각화)
+3. **`1`·`2`·`3`·`4`·`5번`** — **모음 인식을 위한 실험들** (1~4 = 모음 인식 연구, 5 = 목소리 시각화)
 
 ```bash
-# 예시: 02_formant 환경 (맥 / 터미널)
-cd voicetypo_demo/02_formant
-python3 -m venv .venv
-source .venv/bin/activate
-pip install PySide6 praat-parselmouth pyworld numpy scipy scikit-learn sounddevice
+cd experiments
+./run.sh 6      # ① 메인부터
+./run.sh 7      # ② 그다음
+./run.sh 1      # ③ 이후 1~5 순서대로 (2, 3, 4, 5 …)
 ```
-
-> 🍎 **맥 주의:** 마이크(sounddevice)가 PortAudio 오류를 내면 → `brew install portaudio` 후 `pip install --force-reinstall sounddevice`.
-> Apple Silicon(M1~M4)도 위 패키지 전부 arm64 휠이 있어 그대로 설치됩니다.
-> venv를 켠 상태(`source .venv/bin/activate`)에선 `python`/`pip` 그대로 쓰면 됩니다 (venv 만들 때만 `python3`).
-
-**실험별 설치 패키지** (requirements.txt 있으면 `pip install -r requirements.txt` 우선):
-
-| 실험 | 설치 |
-| --- | --- |
-| 01 | `torch transformers praat-parselmouth pyworld scikit-learn sounddevice numpy scipy PySide6` |
-| **02** | `PySide6 praat-parselmouth pyworld numpy scipy scikit-learn sounddevice` |
-| 03 | `pip install -r requirements.txt` (있음) |
-| 04 | `torch transformers numpy scipy sounddevice soundfile librosa` |
-| **05** | `pip install -r requirements.txt` (있음: pygame·parselmouth·sounddevice·websockets) |
-| 06 | `pip install -r requirements.txt` (있음, 아현 작성) |
-| **07** | 서버: `pip install -r requirements_web.txt` (fastapi·uvicorn·sounddevice 등) · 웹: `cd web && npm install` (Node 18+) |
-
-> 실행 중 `ModuleNotFoundError: xxx` 가 뜨면 → `pip install xxx` 한 줄이면 해결.
 
 ---
 
-## 데모별 상세
+## ⚡ 한눈에
 
-### 01 · method7 실시간 (포먼트 + wav2vec2, 구버전)
-- **무엇:** 02의 옛 버전. 앙상블·Kalman 얹은 복잡한 형태(오프라인 22.9%). 02로 단순화하며 54.3%로 올림.
-- **실행:** `cd 01_method7_realtime` → `python main.py`
-- **첫 실행:** wav2vec2 모델 자동 다운로드(인터넷). 무거움.
-- **회의 팁:** 02가 있으니 굳이 안 보여줘도 됨. "이걸 정리해서 02가 됐다"는 *발전 서사*용으로만 짧게.
+| # | 실험 | 한 줄 설명 | 실행 | 라이브 | 인터넷 |
+| --- | --- | --- | --- | --- | --- |
+| **06** | **통합본 ⭐ 메인** | **음성→모음 인식→글자 모핑 + 색·크기·떨림 효과 (인식+타이포 통합)** | **`./run.sh 6`** | △ 무거움 | ⭕(첫 실행) |
+| 02 | 포먼트 인식 | F1/F2/F3 **만으로** 7모음 실시간 인식 + 캘리브레이션 | `./run.sh 2` | ✅ 쉽고 안정 | ❌ |
+| 01 | method7 (초기 버전) | 02의 정리 전 원형. 포먼트+wav2vec2 앙상블 | `./run.sh 1` | △ 무거움 | 첫 실행만 ⭕ |
+| 03 | Whisper SSL | 사전학습 표현으로 **화자 독립** 인식 (MPS 가속) | `./run.sh 3` | ⚠️ 가능 | 첫 실행만 ⭕ |
+| 04 | 경량 ML | MFCC + 초소형 CNN(~1MB) 비교 실험 | `./run.sh 4` | ⚠️ wav 권장 | ❌ |
+| 05 | 시각 스케치 | 인식이 아닌 **시각화** — 목소리→글자/형태 (6장면 허브) | `./run.sh 5` | ✅ 화려 | ❌ |
+| 07 | 웹 3D 모음공간 | 브라우저 3D 공간에 모음 포인트클라우드 실시간 | `./run.sh 7` | ✅ 화려·안정 | ❌(설치 후) |
 
-### 02 · 포먼트 (메인 라인) ⭐ 추천
-- **무엇:** F1/F2/F3로 한국어 7모음 실시간 인식 + 시각화 UI. 우리 프로젝트의 본 방향.
-- **실행:** `cd 02_formant` → `python main.py` (PySide6 창이 뜸)
-- **첫 실행:** 캘리브레이션 다이얼로그가 뜰 수 있음 — 7모음을 한 번씩 발음하면 정확도 ↑.
-- **인터넷 불필요.** 가장 안정적. **회의 1순위.**
+---
 
-### 03 · Whisper SSL + MLP
-- **무엇:** Whisper 인코더 + MLP로 화자 독립 인식(미관찰 화자 0.66). 모델 `probe.pt` 포함.
-- **실행(라이브):** `cd 03_whisper_ssl` → `python scripts/03_run_realtime.py`
-- **대체(마이크 불안 시):** `python scripts/06_evaluate_wav_folder.py` 로 `livetest/` 의 녹음 wav 평가
-- **첫 실행:** Whisper-base(약 290MB) 자동 다운로드 → **반드시 목요일 전 미리 1회 실행**해서 받아둘 것.
+## 0. 처음 한 번만 — 환경 세팅
 
-### 04 · 경량 ML (MFCC+CNN / Whisper-tiny)
-- **무엇:** 1~5MB 경량 모델 비교. 체크포인트(v1~v4) + 정규화(norm_stats) 포함.
-- **실행(라이브):** `cd 04_light_ml` → `python scripts/04_live_test_v3.py`
-- **대체:** `python scripts/06_evaluate_wav_folder_v3.py` (livetest wav)
-- **주의:** 중단됐던 프로젝트라 라이브가 불안정할 수 있음 → **대체 wav 데모를 기본으로** 잡는 걸 권장. v4 실행 시 Whisper-tiny 자동 다운로드(작음).
+**새 컴퓨터에 옮겼다면** 먼저 한 번 세팅합니다 (가상환경 + 패키지 자동 설치):
 
-### 05 · 시각화 스케치 ⭐ 추천
-- **무엇:** 목소리 → 글자/형태 시각화 (멘토 작가들 개념 구현). 인식이 아니라 "보여주기".
-- **실행:** `cd 05_visual_sketches` → 먼저 `python voice_input.py`(마이크 값 콘솔 확인) → `python sketch_02_vowel_letterform.py`
-- **추천 데모:** `sketch_02`(글자 변형), `sketch_05_messa_di_voce.py`(통합 작품). 창 종료 **ESC**, 화면 비움 **C**.
-- **인터넷 불필요.** 시각적으로 화려해서 **회의에서 반응 좋음.**
+```bash
+cd experiments
+brew install portaudio        # 맥: 마이크 오디오 백엔드 (한 번만)
+./setup_all.sh                # 01~07 venv 생성 + 패키지 설치 (10~25분, 인터넷 필요)
+```
 
-### 06 · 통합본 (아현 브랜치) — 참고
-- **무엇:** 원래 main에 있던 통합 실행본(`main_integrated.py`). 아현이 자기 브랜치로 보존.
-- **실행:** `cd 06_integrated` → `python main_integrated.py`
-- **주의:** **아현의 작업물**입니다. 회의에선 보통 본인이 데모해요 — 보여줄지 미리 상의 권장. 무겁고(임베딩 데이터 포함) 모델 다운로드가 필요할 수 있음.
+> - 이미 세팅된 컴퓨터(=이 폴더를 만든 노트북)에서는 **건너뛰고 바로 `./run.sh`** 쓰면 됩니다.
+> - 설치는 `python3.12` 기준입니다. 끝나면 `setup_log.txt`에 성공/실패가 남아요.
+> - **마이크 권한**: 시스템 설정 → 개인정보 보호 및 보안 → **마이크** → 터미널(또는 VSCode) 허용.
 
-### 07 · 웹 3D 모음공간 (React + Three.js) ⭐ 신규 추천
-- **무엇:** 목소리 → 포먼트(F1/F2/F3)·피치·비브라토 추출 후, **브라우저 3D 공간에 모음별 포인트 클라우드 + 타원체**를 실시간 시각화. Python(FastAPI+WebSocket) 백엔드 ↔ 웹 프론트엔드(R3F).
-- **구성:** `server.py`(마이크→분석→WS 스트리밍, 포트 8765) + `web/`(Vite 개발서버, 포트 3000). 핵심 화면: `web/src/components/VowelSpace3D.tsx`.
-- **실행 (터미널 2개 필요):**
-  - 터미널 A: `cd 07_web_3d` → `source .venv/bin/activate` → `python server.py` (마이크 없이 미리보기는 `python server.py --sim`)
-  - 터미널 B: `cd 07_web_3d/web` → `npm run dev` → 브라우저에서 **http://localhost:3000** 열기
-- **인터넷 불필요**(설치 후). 마이크 권한 필요. **회의에서 시각적으로 가장 임팩트 큼.**
-- **팁:** 발표 직전 `--sim`으로 한 번 띄워 화면 흐름을 확인해두면 안전. 실제 발표는 `--sim` 빼고 마이크로.
+---
+
+## 1~7 상세 + 실행 코드
+
+> 아래 명령은 전부 `experiments` 폴더 안에서 실행합니다. (`cd experiments` 먼저)
+
+### 06 · 통합본 ⭐ **메인 데모**
+> **원본:** `ahyun` 브랜치 · `main_integrated.py` (원래 `main`에 있던 통합본을 ahyun이 이관) — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/ahyun)
+- **무엇:** 음성 → 모음 인식 → **타이포(글자) 변형 + 모핑**까지 하나로 묶은 통합 실행본(`main_integrated.py`). 01~05에서 검증한 인식·분석을 **실제 제품 형태로 합친 본체**.
+- **발성하면 화면에서:**
+  1. **모음 인식 → 그 모음 글자(글리프)로 모핑**
+  2. **피치 → 색상(빨강↔파랑) + 세로/가로 비율**
+  3. **볼륨 → 글자 크기**
+  4. **비브라토 → 떨림**
+  5. **말 멈춤(VAD) → 페이드 인/아웃**
+- 인식 방식은 **포먼트 / MFCC / XLSR** 중에서 전환 가능 — 여러 실험을 한 화면에서 비교할 수 있어요.
+```bash
+./run.sh 6
+```
+- 첫 실행 시 일부 모델을 자동 다운로드할 수 있어요(인터넷). 무거우니 **회의 전 미리 1회** 띄워두면 안전합니다.
+
+### 02 · 포먼트 기반 7모음 인식
+> **원본:** `jaewon` 브랜치 · `02_formant` 작업 라인 (01을 정리·발전시킨 것) — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/jaewon)
+- **무엇:** 학습된 신경망 없이 **포먼트(F1/F2/F3) 값만으로** 아/에/이/오/우/으/어를 실시간 인식 + 시각화. 실시간 글자 모핑에 쓰려고 "연속적인 포먼트 값"을 끝까지 파고든 라인.
+- **결과 요약:** cleanup 후 54.3% → 캘리브레이션·학습 기반으로 합성 다화자 92.9%까지. (실제 다화자 라이브는 검증 진행 중)
+```bash
+./run.sh 2
+```
+- **첫 실행 시 캘리브레이션 다이얼로그**가 떠요 → 7모음을 한 번씩 발음하면 내 목소리에 맞춰 정확해집니다.
+- 마이크가 안 잡히면 창 상단 **"마이크:" 드롭다운**에서 본인 입력장치 선택.
+- 다른 사람이 시연할 땐 캘리브레이션 다시 받기: `cd 02_formant && source .venv/bin/activate && python cal_setup.py --reset`
+
+### 01 · method7 (초기 버전)
+> **원본:** `jaewon` 브랜치 · 원래 `main`의 `vowel_recognition/method_7_realtime_integrated` — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/jaewon)
+- **무엇:** 02의 **정리 전 원형**. 포먼트 앙상블 + Kalman 안정화 + wav2vec2 임베딩 K-NN을 한 번에 얹은 복잡한 구조. 실시간 7모음 인식 GUI는 실제로 동작.
+- **포인트:** "이걸 다 걷어내고 단순화한 게 02"라는 **발전 서사**용. 첫 실행 시 wav2vec2 모델 자동 다운로드(무거움).
+```bash
+./run.sh 1
+```
+
+### 03 · Whisper SSL + MLP (화자 독립)
+> **원본:** `jaewon` 브랜치 · `03_whisper_ssl` (Whisper SSL 학습 라인, voicetypo_new 계열) — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/jaewon)
+- **무엇:** 02와 정반대 전략 — 직접 만든 규칙 대신 대규모 **사전학습 표현(Whisper 인코더)** + 경량 MLP로 인식. **처음 보는 화자**에게도 동작하는지가 핵심.
+- **속도:** 애플 실리콘이면 **자동으로 GPU(MPS) 가속** (CPU 대비 ~2배). 윈도우+엔비디아면 CUDA, 그 외엔 CPU로 자동 폴백.
+```bash
+./run.sh 3
+```
+- "listening" 뜨면 모음 하나씩 또렷이 발음 → 막대그래프로 결과. 종료 `Ctrl-C`. 첫 실행 시 Whisper-base(290MB) 자동 다운로드 → **미리 1회 실행** 권장.
+- 마이크 불안하면 녹음 wav 평가: `./run.sh 3wav`
+
+### 04 · 경량 ML (MFCC + small CNN)
+> **원본:** `jaewon` 브랜치 · `voicetypo_light` (Method 3: MFCC + small CNN) — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/jaewon)
+- **무엇:** "03의 Whisper(290MB)가 7모음에 과한 거 아닌가?"를 검증 — **~1MB 초소형 CNN**으로 같은 화자분리 셋에서 비교.
+- **동작 방식(주의):** 연속 인식이 아니라 **한 모음씩 녹음→평가**하는 방식. 모음 입력하고 엔터 누르면 **"준비 3..2..1.. 지금 발음!"** 카운트다운이 뜨고, 그때 소리내면 됩니다.
+```bash
+./run.sh 4
+```
+- 라이브가 불안정하면(중단됐던 프로젝트) 녹음 wav 평가가 안정적: `./run.sh 4wav`
+
+### 05 · 시각 스케치 (목소리 → 시각화)
+> **원본:** `jaewon` 브랜치 · `05_visual_sketches` (스터디로그 시각화 실험) — [GitHub](https://github.com/AhyunSon/VoiceTypo/tree/jaewon)
+- **무엇:** 01~04가 "인식" 트랙이라면, 05는 반대편 **"시각화"** — 목소리를 글자/형태로 보여주기 (멘토 작가들 개념 구현). F1=높이, F2=폭, Pitch=회전, Volume=크기, 모음=형태.
+- **한 창에 다 모음:** `sketch_hub.py`가 6개 장면(스케치 5 + 실시간 생성 1)을 **단일 창**에 띄웁니다.
+```bash
+./run.sh 5
+```
+- **상단 버튼 클릭** 또는 **숫자키 1~6**으로 장면 전환 (시작 시 큰 안내 배너 표시). `C` 화면 비움, `ESC` 종료.
+
+### 07 · 웹 3D 모음공간 (React + Three.js)
+> **원본:** 로컬 신규 작업 (아직 GitHub 미반영)
+- **무엇:** 목소리 → 포먼트/피치/비브라토 추출 후 **브라우저 3D 공간에 모음별 포인트클라우드**를 실시간 시각화. Python(FastAPI+WebSocket) 백엔드 ↔ 웹(R3F) 프론트.
+- **실행:** `./run.sh 7` 하면 **서버 + 웹이 자동으로** 뜨고 브라우저가 열립니다.
+```bash
+./run.sh 7
+```
+- 브라우저에서 **http://localhost:3000**. 종료 `Ctrl-C`(서버·웹 같이 정리됨).
+- 마이크 없이 화면만 미리보기: `./run.sh 7sim`
 
 ---
 
@@ -111,24 +134,14 @@ pip install PySide6 praat-parselmouth pyworld numpy scipy scikit-learn sounddevi
 
 | 증상 | 해결 |
 | --- | --- |
-| `ModuleNotFoundError` | `pip install <모듈명>` |
-| 마이크 입력 없음 | 시스템 설정 → 개인정보 보호 및 보안 → 마이크 → **터미널(또는 IDE) 허용**. 처음엔 권한 팝업이 뜸 |
-| PortAudio 오류 | `brew install portaudio` → `pip install --force-reinstall sounddevice` |
-| 모델 다운로드가 느림/실패 | 인터넷 좋은 곳에서 **미리** 1회 실행 (캐시됨). 회의장 와이파이 의존 X |
-| Qt/pygame 창이 안 뜸 | 디스플레이/원격접속 환경 확인. 로컬 노트북 화면에서 실행 |
-| 추론이 느림(GPU 없음) | 정상 — 작은 모델이라 CPU로도 됨. 03은 첫 추론만 느림 |
-| 07 웹이 안 뜸/회색 화면 | 서버(`python server.py`)와 웹(`npm run dev`)을 **둘 다** 켰는지 확인. 브라우저는 http://localhost:3000 |
-| 07 `npm` 오류/`tsc` 버전 에러 | `cd 07_web_3d/web && rm -rf node_modules && npm install` 로 재설치 (Node 18+) |
-
-## ✅ 목요일 전 체크리스트
-
-- [ ] 폴더를 노트북에 복사 (USB/클라우드)
-- [ ] 인터넷 되는 곳에서 **7개 다 미리 한 번씩 실행** (특히 03 모델 다운로드, 07 `npm install`)
-- [ ] 마이크 권한 확인 + 실제로 말해서 인식되는지 확인
-- [ ] 02·05·07을 메인 데모로, 03·04는 대체 wav도 준비
-- [ ] 06(아현 것) 보여줄지 아현과 상의
-- [ ] 07은 터미널 2개(서버+웹) 띄우는 흐름 미리 연습 — 브라우저 http://localhost:3000
+| `❌ … 세팅 안됨` | 그 컴퓨터에서 아직 세팅 안 한 것 → `./setup_all.sh` |
+| 마이크 입력 없음 / 막대 안 움직임 | ① 시스템 설정 → 개인정보 보호 → **마이크** 허용  ② 시스템 설정 → 사운드 → **입력**에서 쓰는 마이크 선택 + 입력 볼륨 ↑ |
+| 02 인식이 부정확 | 캘리브레이션을 본인 목소리로 다시: `python cal_setup.py --reset` (02_formant 안에서) |
+| 02에서 USB 등 특정 마이크가 안 잡힘 | 창 상단 **마이크 드롭다운**에서 다른 장치 선택 (신호 들어오는 장치로) |
+| 모델 다운로드 느림/실패 (01·03·06) | 인터넷 좋은 곳에서 **미리 1회** 실행해 캐시 받아두기 |
+| `ModuleNotFoundError: xxx` | 해당 폴더 venv 켜고 `pip install xxx` 한 줄 |
+| 07 웹이 회색/안 뜸 | `Ctrl-C` 후 다시 `./run.sh 7`. 브라우저는 http://localhost:3000 |
 
 ---
 
-*데이터 20GB 제외 · 모델·정규화 파일 포함 · 07(웹) 추가로 폴더 용량 증가(node_modules 포함 ~250MB). 학습 재현이 필요하면 원본 데이터(이 컴퓨터의 `voicetypo_new/data`, `realtime_formant/evaluation`)가 따로 있음.*
+*데이터 20GB 제외 · 모델·정규화 파일 포함 · `./run.sh`(실행)와 `./setup_all.sh`(세팅)는 팀 편의용 스크립트입니다.*

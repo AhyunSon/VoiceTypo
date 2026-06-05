@@ -21,6 +21,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -154,7 +155,12 @@ def main():
                 print(f"  ! 알 수 없는 모음 '{user}'. 다시 입력.")
                 continue
 
-            print(f"  녹음 {args.duration:.1f}s ... ", end="", flush=True)
+            # 엔터 직후 바로 녹음하면 발음 타이밍을 놓치므로 3·2·1 카운트다운으로 신호
+            print("  준비 ", end="", flush=True)
+            for c in (3, 2, 1):
+                print(f"{c}.. ", end="", flush=True)
+                time.sleep(0.8)
+            print(f"▶ 지금 '{display[label]}' 발음! ({args.duration:.1f}s) ", end="", flush=True)
             wav = record(sr=sr, duration_s=args.duration, device=args.device)
             print("끝")
 
