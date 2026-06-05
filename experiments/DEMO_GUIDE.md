@@ -43,8 +43,10 @@ cd experiments
 > → 그냥 **코드만 볼 거면 GitHub로 충분**(세팅 불필요). **직접 돌려볼 거면 아래 A~C** 따라하세요.
 
 **A. 모델 포함 폴더 받기** (직접 실행 시 필수)
-`experiments` 폴더를 **모델 포함된 채로** 공유 드라이브/USB에서 받으세요.
-👉 **공유 드라이브 링크: _(팀 채팅에 별도 첨부)_**  ← 코드(GitHub)와 달리 모델이 들어 있는 버전
+모델까지 포함된 실행용 패키지(`VoiceTypo_demo_run.zip`)를 받으세요.
+👉 **위치: VoiceTypo Drive (팀 구글 드라이브)** 의 `VoiceTypo/VoiceTypo_demo_run.zip`
+> 코드(GitHub)와 달리 모델이 들어 있는 버전이에요. (이 repo는 공개라 링크는 팀 내부로만 공유 — 드라이브 위치 참고)
+> 압축 풀면 `experiments/` 폴더가 나옵니다.
 
 **B. 세팅** (새 컴퓨터에서 한 번만)
 ```bash
