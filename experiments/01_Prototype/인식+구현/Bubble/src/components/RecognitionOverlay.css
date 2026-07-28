@@ -1,0 +1,62 @@
+/* 인식 로그 오버레이 (B3, 개발용) */
+.rec-overlay {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 4;
+  width: 210px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(20, 30, 42, 0.82);
+  color: #eaf2f8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+.rec-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rec-k {
+  color: #8fb2cc;
+  font-size: 11px;
+}
+.rec-v {
+  font-weight: 700;
+  margin-right: 4px;
+}
+.rec-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.rec-badge.on {
+  background: #1f7a4d;
+}
+.rec-badge.off {
+  background: #7a3a3a;
+}
+.rec-events {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow: hidden;
+}
+.rec-ev {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+}
+.rec-ev.muted {
+  color: #6d8598;
+}
+.rec-t {
+  color: #6fa8cc;
+}

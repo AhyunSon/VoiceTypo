@@ -1,0 +1,90 @@
+.signal-panel {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  width: 240px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: rgba(16, 22, 30, 0.82);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  color: #e8eef4;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  user-select: none;
+  z-index: 20;
+}
+
+.sp-head {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #9fb3c8;
+  margin-bottom: 8px;
+}
+
+.sp-readout {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.sp-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-label {
+  font-size: 10px;
+  color: #8ea3b8;
+}
+
+.sp-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: #38e0d0;
+}
+
+.sp-unit {
+  font-size: 11px;
+  font-weight: 500;
+  color: #7f93a8;
+  margin-left: 2px;
+}
+
+.sp-canvas {
+  display: block;
+  width: 224px;
+  height: 96px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.sp-energy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sp-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.sp-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #f5c842, #f59e42);
+  transition: width 60ms linear;
+}
+
+.sp-en-val {
+  font-size: 12px;
+  color: #d7e0ea;
+  min-width: 30px;
+  text-align: right;
+}
