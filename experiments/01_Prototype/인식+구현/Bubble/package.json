@@ -1,0 +1,28 @@
+{
+  "name": "sorijit-bubble",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "소리짓 - 비눗방울 인터랙션 시스템 (버블 구현 1차): 실시간 음성 → 버블 세그먼트 시각화",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pitchy": "^4.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.0"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true
+  }
+}

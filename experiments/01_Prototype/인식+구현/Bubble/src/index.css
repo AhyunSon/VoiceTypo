@@ -1,0 +1,22 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  /* 비눗방울이 잘 보이도록 옅은 하늘빛 그라데이션 배경 */
+  background: radial-gradient(120% 120% at 50% 0%, #eaf3fb 0%, #eef4f8 45%, #f6f8fa 100%);
+  color: #111;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
